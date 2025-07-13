@@ -1,0 +1,1262 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import Image from "next/image"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
+import {
+  CheckCircle,
+  Users,
+  Award,
+  Globe,
+  BookOpen,
+  MessageSquare,
+  Target,
+  Star,
+  ArrowRight,
+  Sparkles,
+  Trophy,
+  Clock,
+  Calendar,
+  MapPin,
+  Mail,
+  Phone,
+  ExternalLink,
+  Download,
+  AlertCircle,
+} from "lucide-react"
+
+declare global {
+  interface Window {
+    Razorpay: any
+  }
+}
+
+export default function MuniqWebsite() {
+  const [currentSection, setCurrentSection] = useState("home")
+  const [isLoading, setIsLoading] = useState(false)
+  const [formErrors, setFormErrors] = useState<string[]>([])
+  const { toast } = useToast()
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    dob: "",
+    standard: "",
+    institution: "",
+    munExperience: "",
+    email: "",
+    contact: "",
+  })
+
+  const [showLegalPage, setShowLegalPage] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Load Razorpay script
+    const script = document.createElement("script")
+    script.src = "https://checkout.razorpay.com/v1/checkout.js"
+    script.async = true
+    document.body.appendChild(script)
+
+    return () => {
+      document.body.removeChild(script)
+    }
+  }, [])
+
+  const scrollToSection = (sectionId: string) => {
+    setCurrentSection(sectionId)
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" })
+    }
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+    // Remove field from errors when user starts typing
+    if (formErrors.includes(field)) {
+      setFormErrors((prev) => prev.filter((error) => error !== field))
+    }
+  }
+
+  const validateForm = () => {
+    const requiredFields = ["firstName", "lastName", "standard", "munExperience", "email"]
+    const errors = requiredFields.filter((field) => !formData[field as keyof typeof formData])
+
+    setFormErrors(errors)
+
+    if (errors.length > 0) {
+      toast({
+        title: "Missing Required Fields",
+        description: "Please fill in all mandatory fields marked with *",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
+  }
+
+  const saveFormData = async (data: typeof formData) => {
+    try {
+      // Save to localStorage as backup
+      localStorage.setItem(
+        "muniq_registration",
+        JSON.stringify({
+          ...data,
+          timestamp: new Date().toISOString(),
+        }),
+      )
+
+      // Here you would typically save to your database
+      // For now, we'll simulate an API call
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to save registration data")
+      }
+
+      console.log("Registration data saved successfully")
+    } catch (error) {
+      console.error("Error saving registration data:", error)
+      // Still proceed with payment even if saving fails
+    }
+  }
+
+  const handleRegistration = async () => {
+    if (!validateForm()) {
+      return
+    }
+
+    // Save form data
+    await saveFormData(formData)
+
+    setCurrentSection("payment")
+    scrollToSection("payment")
+  }
+
+  const handlePayment = () => {
+    setIsLoading(true)
+
+    const options = {
+      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_1234567890",
+      amount: 1100, // ₹11 in paise
+      currency: "INR",
+      name: "MUNIQ by AJ",
+      description: "Beginner MUN Workshop Registration",
+      image: "/logo_c_bg.png",
+      handler: (response: any) => {
+        setIsLoading(false)
+        setCurrentSection("confirmation")
+        scrollToSection("confirmation")
+
+        // Save payment info
+        const paymentData = {
+          ...formData,
+          paymentId: response.razorpay_payment_id,
+          orderId: response.razorpay_order_id,
+          signature: response.razorpay_signature,
+          amount: 11,
+          timestamp: new Date().toISOString(),
+        }
+
+        localStorage.setItem("muniq_payment", JSON.stringify(paymentData))
+
+        toast({
+          title: "Payment Successful!",
+          description: "Your registration has been confirmed. Check your email for details.",
+        })
+      },
+      prefill: {
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        contact: formData.contact,
+      },
+      notes: {
+        standard: formData.standard,
+        institution: formData.institution,
+        munExperience: formData.munExperience,
+      },
+      theme: {
+        color: "#1e40af",
+      },
+      modal: {
+        ondismiss: () => {
+          setIsLoading(false)
+        },
+      },
+    }
+
+    if (window.Razorpay) {
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } else {
+      toast({
+        title: "Payment Error",
+        description: "Payment gateway not loaded. Please refresh and try again.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+    }
+  }
+
+const handleBrochureDownload = () => {
+  const pdfPath = "/Muniq_pamphlet.pdf"; // Updated to match the actual file name
+
+  const a = document.createElement("a");
+  a.href = pdfPath;
+  a.download = "Muniq_pamphlet.pdf";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  toast({
+    title: "Brochure Downloaded!",
+    description: "The workshop brochure PDF has been downloaded to your device.",
+  });
+};
+
+  return (
+    <div className="min-h-screen bg-white overflow-x-hidden">
+      <Toaster />
+
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-md border-b border-blue-100 z-50 shadow-sm">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => scrollToSection("home")}>
+              <div className="relative">
+                <Image
+                  src="/logo_c_bg.png"
+                  alt="MUNIQ Logo"
+                  width={45}
+                  height={45}
+                  className="hover:scale-110 transition-transform duration-300"
+                />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+              </div>
+              <span className="text-2xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent">
+                MUNIQ
+              </span>
+            </div>
+            <div className="hidden md:flex space-x-8">
+              {["Home", "About", "Workshop", "Founders"].map((item) => (
+                <button
+                  key={item}
+                  onClick={() => scrollToSection(item.toLowerCase())}
+                  className="text-blue-700 hover:text-blue-900 transition-all duration-300 font-medium relative group"
+                >
+                  {item}
+                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-600 transition-all duration-300 group-hover:w-full"></span>
+                </button>
+              ))}
+            </div>
+            <Button
+              onClick={() => scrollToSection("registration")}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Register Now
+            </Button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section
+        id="home"
+        className="pt-20 pb-20 bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 relative overflow-hidden"
+      >
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+        </div>
+
+        <div className="container mx-auto px-4 text-center relative z-10">
+          <div className="max-w-5xl mx-auto">
+            <div className="mb-12 animate-fade-in-up">
+              <div className="relative inline-block mb-8">
+                <Image
+                  src="/logo_c_bg.png"
+                  alt="MUNIQ Logo"
+                  width={140}
+                  height={140}
+                  className="mx-auto mb-6 hover:scale-110 transition-transform duration-500 drop-shadow-2xl"
+                />
+                <div className="absolute -inset-4 bg-white/10 rounded-full blur-lg"></div>
+              </div>
+
+              <h1 className="text-6xl md:text-8xl font-bold text-white mb-6 tracking-tight leading-tight">
+                <span className="bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">MUNIQ</span>
+                <span className="block text-4xl md:text-5xl font-light text-blue-200 mt-2 leading-tight">by AJ</span>
+              </h1>
+
+              <div className="relative">
+                <p className="text-3xl md:text-4xl text-blue-100 mb-12 font-light tracking-wide leading-tight">
+                  Where diplomats are built.
+                </p>
+                <div className="absolute -inset-2 bg-gradient-to-r from-blue-600/20 to-transparent rounded-lg blur-sm"></div>
+              </div>
+            </div>
+
+            <div className="space-y-8 mb-16 animate-fade-in-up animation-delay-500">
+              <div className="relative group">
+                <blockquote className="text-3xl md:text-5xl font-bold text-white italic transform group-hover:scale-105 transition-transform duration-300 leading-tight">
+                  "Speak so the world listens."
+                </blockquote>
+                <div className="absolute -inset-4 bg-gradient-to-r from-blue-400/20 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+
+              <div className="relative group">
+                <blockquote className="text-3xl md:text-5xl font-bold text-white italic transform group-hover:scale-105 transition-transform duration-300 leading-tight">
+                  "Lead so the world follows."
+                </blockquote>
+                <div className="absolute -inset-4 bg-gradient-to-r from-indigo-400/20 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center animate-fade-in-up animation-delay-1000">
+              <Button
+                onClick={() => scrollToSection("registration")}
+                size="lg"
+                className="bg-white text-blue-900 hover:bg-blue-50 text-xl px-10 py-6 rounded-full font-bold shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 group"
+              >
+                <Trophy className="w-6 h-6 mr-3 group-hover:rotate-12 transition-transform duration-300" />
+                Join the Diplomatic Revolution
+                <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform duration-300" />
+              </Button>
+
+              <Button
+                onClick={() => scrollToSection("workshop")}
+                size="lg"
+                className="bg-white/10 backdrop-blur-sm border-2 border-white text-white hover:bg-white hover:text-blue-900 text-lg px-8 py-6 rounded-full font-semibold transition-all duration-300 transform hover:scale-105"
+              >
+                View Workshop Details
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Welcome Section */}
+      <section id="about" className="py-20 bg-gradient-to-b from-white to-blue-50">
+        <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto text-center">
+            <div className="mb-8 animate-fade-in-up">
+              <Badge className="bg-blue-100 text-blue-800 px-6 py-2 text-lg font-semibold mb-6">
+                Welcome to Excellence
+              </Badge>
+              <h2 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-8 leading-tight">
+                WELCOME TO MUNIQ
+              </h2>
+            </div>
+
+            <p className="text-xl text-gray-700 mb-16 leading-relaxed max-w-4xl mx-auto animate-fade-in-up animation-delay-300">
+              Welcome to MUNIQ, where future diplomats are shaped through immersive Model United Nations experiences. We
+              believe in empowering young minds with the skills of diplomacy, negotiation, and global leadership that
+              will define tomorrow's world.
+            </p>
+
+            <div className="relative animate-fade-in-up animation-delay-500">
+              <div className="text-3xl font-bold text-blue-800 mb-12 leading-tight">Your Diplomatic Journey</div>
+              <div className="flex flex-col md:flex-row justify-center items-center space-y-8 md:space-y-0 md:space-x-12">
+                {[
+                  { step: "Learn", icon: BookOpen, delay: "0s" },
+                  { step: "Practice", icon: Users, delay: "0.5s" },
+                  { step: "Excel", icon: Trophy, delay: "1s" },
+                  { step: "Lead", icon: Star, delay: "1.5s" },
+                ].map((item, index) => (
+                  <div key={item.step} className="flex flex-col items-center group">
+                    <div
+                      className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mb-4 shadow-lg group-hover:shadow-xl transition-all duration-300 transform group-hover:scale-110"
+                      style={{ animationDelay: item.delay }}
+                    >
+                      <item.icon className="w-10 h-10 text-white" />
+                    </div>
+                    <span className="text-xl font-semibold text-blue-900 group-hover:text-blue-600 transition-colors duration-300">
+                      {item.step}
+                    </span>
+                    {index < 3 && (
+                      <ArrowRight className="w-8 h-8 text-blue-400 mt-4 md:mt-0 md:ml-8 md:absolute md:translate-x-24 hidden md:block" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* What We Do Section */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16 animate-fade-in-up">
+              <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
+                What We Do
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                Comprehensive MUN training that transforms students into confident global leaders
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-5 gap-8">
+              {[
+                { icon: BookOpen, title: "MUN Training", desc: "Comprehensive Model UN education" },
+                { icon: MessageSquare, title: "Public Speaking", desc: "Confident communication skills" },
+                { icon: Users, title: "Leadership", desc: "Essential leadership development" },
+                { icon: Globe, title: "Global Awareness", desc: "International relations insight" },
+                { icon: Award, title: "Certification", desc: "Recognized achievement certificates" },
+              ].map((item, index) => (
+                <Card
+                  key={item.title}
+                  className="border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:scale-105 group animate-fade-in-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <CardContent className="p-8 text-center">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:from-blue-600 group-hover:to-blue-700 transition-all duration-300">
+                      <item.icon className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="font-bold text-blue-900 text-lg mb-3 group-hover:text-blue-600 transition-colors duration-300 leading-tight">
+                      {item.title}
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Why MUNIQ Section */}
+      <section className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="container mx-auto px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16 animate-fade-in-up">
+              <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-4 leading-tight">
+                Why MUNIQ?
+              </h2>
+              <p className="text-2xl text-blue-700 font-semibold mb-8 leading-tight">Sharpening your future</p>
+              <div className="w-24 h-1 bg-gradient-to-r from-blue-500 to-blue-600 mx-auto rounded-full"></div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                {
+                  icon: Target,
+                  title: "Expert Guidance",
+                  desc: "Learn from experienced MUN delegates and diplomats who understand the nuances of international relations and can guide you to excellence.",
+                  color: "from-blue-500 to-blue-600",
+                },
+                {
+                  icon: Star,
+                  title: "Practical Learning",
+                  desc: "Hands-on workshops that simulate real UN sessions, giving you authentic diplomatic experience that you can't get anywhere else.",
+                  color: "from-indigo-500 to-indigo-600",
+                },
+                {
+                  icon: CheckCircle,
+                  title: "Proven Results",
+                  desc: "Our participants consistently excel in MUN conferences and develop strong leadership capabilities that serve them throughout their careers.",
+                  color: "from-blue-600 to-indigo-600",
+                },
+              ].map((item, index) => (
+                <Card
+                  key={item.title}
+                  className="border-0 shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:scale-105 group animate-fade-in-up"
+                  style={{ animationDelay: `${index * 0.2}s` }}
+                >
+                  <CardHeader className="text-center pb-4">
+                    <div
+                      className={`w-16 h-16 bg-gradient-to-br ${item.color} rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg`}
+                    >
+                      <item.icon className="w-8 h-8 text-white" />
+                    </div>
+                    <CardTitle className="text-blue-900 text-xl group-hover:text-blue-600 transition-colors duration-300 leading-tight">
+                      {item.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 leading-relaxed text-center">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Workshop Section */}
+      <section id="workshop" className="py-20 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-16 animate-fade-in-up">
+              <Badge className="bg-red-100 text-red-800 px-6 py-2 text-lg font-semibold mb-6">
+                🔥 Limited Seats Available
+              </Badge>
+              <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
+                Upcoming Workshop
+              </h2>
+              <p className="text-xl text-gray-600 leading-relaxed">Transform your diplomatic skills in just 2 hours</p>
+            </div>
+
+            <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up animation-delay-300">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                  <div>
+                    <CardTitle className="text-3xl mb-3 font-bold leading-tight">Beginner Workshop</CardTitle>
+                    <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                      Perfect for MUN newcomers and enthusiasts
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-col gap-3 mt-4 md:mt-0">
+                    <Badge className="bg-white text-blue-600 font-semibold px-4 py-2">
+                      <Award className="w-4 h-4 mr-2" />
+                      Certificate Provided
+                    </Badge>
+                    <Badge className="bg-red-500 text-white font-semibold px-4 py-2 animate-pulse">
+                      🔥 Few Slots Left
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-8">
+                <div className="grid md:grid-cols-2 gap-12">
+                  <div className="space-y-6">
+                    <h4 className="text-2xl font-bold text-blue-900 mb-6 leading-tight">Workshop Details</h4>
+                    {[
+                      { icon: Clock, label: "Duration", value: "2 hours" },
+                      { icon: Globe, label: "Mode", value: "Online" },
+                      { icon: Calendar, label: "Date", value: "20th July" },
+                      { icon: MapPin, label: "Time", value: "To be announced" },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex items-center space-x-4 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors duration-300"
+                      >
+                        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                          <item.icon className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <span className="font-semibold text-blue-900">{item.label}:</span>
+                          <span className="ml-2 text-gray-700">{item.value}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <h4 className="text-2xl font-bold text-blue-900 mb-6 leading-tight">Topics Covered</h4>
+                    <div className="space-y-4">
+                      {[
+                        "Introduction to Model UN",
+                        "Rules of Procedure",
+                        "Research Techniques",
+                        "Public Speaking Skills",
+                        "Negotiation Strategies",
+                        "Resolution Writing",
+                      ].map((topic, index) => (
+                        <div
+                          key={topic}
+                          className="flex items-center space-x-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg hover:from-blue-100 hover:to-indigo-100 transition-all duration-300"
+                        >
+                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {index + 1}
+                          </div>
+                          <span className="text-gray-700 font-medium">{topic}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <Separator className="my-8" />
+
+                <div className="text-center">
+                  <div className="mb-8">
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="text-2xl font-bold text-gray-400 line-through">₹499/-</div>
+                      <div className="text-4xl font-bold text-green-600">₹11/-</div>
+                      <Badge className="bg-green-100 text-green-800 font-bold">98% OFF!</Badge>
+                    </div>
+                    <p className="text-gray-600 leading-relaxed">
+                      Includes certificate, materials, and lifetime access to resources
+                    </p>
+                    <p className="text-red-600 font-semibold mt-2">⚡ Limited Time Offer!</p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Button
+                      onClick={() => scrollToSection("registration")}
+                      size="lg"
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg px-8 py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    >
+                      <Sparkles className="w-5 h-5 mr-2" />
+                      Register Now
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+
+                    <Button
+                      onClick={handleBrochureDownload}
+                      variant="outline"
+                      size="lg"
+                      className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white text-lg px-8 py-4 transition-all duration-300 bg-transparent"
+                    >
+                      <Download className="w-5 h-5 mr-2" />
+                      Download Brochure
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Founders Section */}
+      <section id="founders" className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-16 animate-fade-in-up">
+              <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
+                Meet Our Founders
+              </h2>
+              <p className="text-xl text-gray-600 leading-relaxed">
+                Visionary leaders shaping the next generation of diplomats
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-12">
+              <Card className="border-0 shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:scale-105 group animate-fade-in-up">
+                <CardHeader className="text-center pb-6">
+                  <div className="relative mb-6">
+                    <div className="w-32 h-32 rounded-full mx-auto overflow-hidden shadow-xl group-hover:shadow-2xl transition-all duration-300 group-hover:scale-110">
+                      <Image
+                        src="/ra-photo.png"
+                        alt="Rakshit Ahuja"
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute -inset-4 bg-gradient-to-r from-blue-400/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-lg"></div>
+                  </div>
+                  <CardTitle className="text-blue-900 text-2xl mb-2 group-hover:text-blue-600 transition-colors duration-300 leading-tight">
+                    Rakshit Ahuja
+                  </CardTitle>
+                  <CardDescription className="text-blue-700 font-semibold text-lg leading-tight">
+                    Co-Founder & Lead Trainer
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center px-8 pb-8">
+                  <p className="text-gray-700 leading-relaxed">
+                    An accomplished undergraduate with extensive MUN experience as both a delegate and Executive Board member. A successful entrepreneur and passionate educator, he brings his leadership and teaching expertise to the forefront as the lead trainer, guiding students to excel in diplomacy, public speaking, and strategic committee engagement.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:scale-105 group animate-fade-in-up animation-delay-300">
+                <CardHeader className="text-center pb-6">
+                  <div className="relative mb-6">
+                    <div className="w-32 h-32 rounded-full mx-auto overflow-hidden shadow-xl group-hover:shadow-2xl transition-all duration-300 group-hover:scale-110">
+                      <Image
+                        src="/oj-photo.jpeg"
+                        alt="Om Jhani"
+                        width={128}
+                        height={128}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute -inset-4 bg-gradient-to-r from-indigo-400/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-lg"></div>
+                  </div>
+                  <CardTitle className="text-blue-900 text-2xl mb-2 group-hover:text-blue-600 transition-colors duration-300 leading-tight">
+                    Om Jhani
+                  </CardTitle>
+                  <CardDescription className="text-blue-700 font-semibold text-lg leading-tight">
+                    Co-Founder & Strategy Director
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center px-8 pb-8">
+                  <p className="text-gray-700 leading-relaxed">
+                    An experienced MUN enthusiast and student at the University of Melbourne, bringing a strong
+                    foundation in research, diplomacy, and strategic thinking. With years of involvement in both
+                    participating and organizing MUNs, he offers students a deep understanding of committee dynamics,
+                    public speaking, and global affairs through engaging and practical workshop experiences.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Registration Section */}
+      <section id="registration" className="py-20 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-16 animate-fade-in-up">
+              <Badge className="bg-green-100 text-green-800 px-6 py-2 text-lg font-semibold mb-6">
+                🚀 Secure Your Spot
+              </Badge>
+              <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
+                Register for Workshop
+              </h2>
+              <p className="text-xl text-gray-600 leading-relaxed">Join the diplomatic revolution today</p>
+            </div>
+
+            <Card className="border-0 shadow-2xl animate-fade-in-up animation-delay-300">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
+                <CardTitle className="text-2xl font-bold leading-tight">Registration Form</CardTitle>
+                <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                  All fields marked with * are mandatory
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="p-8 space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-blue-900 font-semibold">
+                      First Name *
+                    </Label>
+                    <Input
+                      id="firstName"
+                      value={formData.firstName}
+                      onChange={(e) => handleInputChange("firstName", e.target.value)}
+                      className={`border-2 transition-colors duration-300 ${
+                        formErrors.includes("firstName")
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-blue-200 focus:border-blue-500"
+                      }`}
+                      required
+                    />
+                    {formErrors.includes("firstName") && (
+                      <div className="flex items-center text-red-500 text-sm mt-1">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        First name is required
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-blue-900 font-semibold">
+                      Last Name *
+                    </Label>
+                    <Input
+                      id="lastName"
+                      value={formData.lastName}
+                      onChange={(e) => handleInputChange("lastName", e.target.value)}
+                      className={`border-2 transition-colors duration-300 ${
+                        formErrors.includes("lastName")
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-blue-200 focus:border-blue-500"
+                      }`}
+                      required
+                    />
+                    {formErrors.includes("lastName") && (
+                      <div className="flex items-center text-red-500 text-sm mt-1">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        Last name is required
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dob" className="text-blue-900 font-semibold">
+                    Date of Birth
+                  </Label>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => handleInputChange("dob", e.target.value)}
+                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="standard" className="text-blue-900 font-semibold">
+                    Standard (Education Level) *
+                  </Label>
+                  <Select value={formData.standard} onValueChange={(value) => handleInputChange("standard", value)}>
+                    <SelectTrigger
+                      className={`border-2 transition-colors duration-300 ${
+                        formErrors.includes("standard")
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-blue-200 focus:border-blue-500"
+                      }`}
+                    >
+                      <SelectValue placeholder="Select your standard" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="9th">9th Grade</SelectItem>
+                      <SelectItem value="10th">10th Grade</SelectItem>
+                      <SelectItem value="11th">11th Grade</SelectItem>
+                      <SelectItem value="12th">12th Grade</SelectItem>
+                      <SelectItem value="undergraduate">Undergraduate</SelectItem>
+                      <SelectItem value="postgraduate">Postgraduate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {formErrors.includes("standard") && (
+                    <div className="flex items-center text-red-500 text-sm mt-1">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      Please select your education level
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="institution" className="text-blue-900 font-semibold">
+                    Institution
+                  </Label>
+                  <Input
+                    id="institution"
+                    value={formData.institution}
+                    onChange={(e) => handleInputChange("institution", e.target.value)}
+                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                    placeholder="Your school/college name"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="munExperience" className="text-blue-900 font-semibold">
+                    MUN Experience *
+                  </Label>
+                  <Select
+                    value={formData.munExperience}
+                    onValueChange={(value) => handleInputChange("munExperience", value)}
+                  >
+                    <SelectTrigger
+                      className={`border-2 transition-colors duration-300 ${
+                        formErrors.includes("munExperience")
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-blue-200 focus:border-blue-500"
+                      }`}
+                    >
+                      <SelectValue placeholder="Select your MUN experience" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="beginner">Beginner (0 conferences)</SelectItem>
+                      <SelectItem value="intermediate">Intermediate (1-3 conferences)</SelectItem>
+                      <SelectItem value="advanced">Advanced (4+ conferences)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {formErrors.includes("munExperience") && (
+                    <div className="flex items-center text-red-500 text-sm mt-1">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      Please select your MUN experience level
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-blue-900 font-semibold">
+                    Email Address *
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange("email", e.target.value)}
+                    className={`border-2 transition-colors duration-300 ${
+                      formErrors.includes("email")
+                        ? "border-red-500 focus:border-red-500"
+                        : "border-blue-200 focus:border-blue-500"
+                    }`}
+                    required
+                  />
+                  {formErrors.includes("email") && (
+                    <div className="flex items-center text-red-500 text-sm mt-1">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      Valid email address is required
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contact" className="text-blue-900 font-semibold">
+                    Contact Number
+                  </Label>
+                  <Input
+                    id="contact"
+                    type="tel"
+                    value={formData.contact}
+                    onChange={(e) => handleInputChange("contact", e.target.value)}
+                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                    placeholder="+91 XXXXX XXXXX"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleRegistration}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  size="lg"
+                >
+                  <ArrowRight className="w-5 h-5 mr-2" />
+                  Proceed to Payment
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Payment Section */}
+      {currentSection === "payment" && (
+        <section id="payment" className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
+          <div className="container mx-auto px-4">
+            <div className="max-w-md mx-auto">
+              <Card className="border-0 shadow-2xl">
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center p-8">
+                  <CardTitle className="text-2xl font-bold leading-tight">Complete Payment</CardTitle>
+                  <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                    Secure payment via Razorpay
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="p-8 space-y-6">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-3 mb-4">
+                      <div className="text-2xl font-bold text-gray-400 line-through">₹499/-</div>
+                      <div className="text-4xl font-bold text-green-600">₹11/-</div>
+                    </div>
+                    <p className="text-gray-600 mb-6 leading-relaxed">Beginner Workshop</p>
+                  </div>
+
+                  <div className="space-y-3 text-left bg-blue-50 p-6 rounded-lg">
+                    <p className="flex justify-between">
+                      <strong>Name:</strong>
+                      <span>
+                        {formData.firstName} {formData.lastName}
+                      </span>
+                    </p>
+                    <p className="flex justify-between">
+                      <strong>Email:</strong>
+                      <span>{formData.email}</span>
+                    </p>
+                    <p className="flex justify-between">
+                      <strong>Standard:</strong>
+                      <span>{formData.standard}</span>
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handlePayment}
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    size="lg"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="w-5 h-5 mr-2" />
+                        Pay ₹11 with Razorpay
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-xs text-gray-500 text-center leading-relaxed">
+                    Secured by Razorpay. Your payment information is encrypted and secure.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Confirmation Section */}
+      {currentSection === "confirmation" && (
+        <section id="confirmation" className="py-20 bg-gradient-to-br from-green-50 to-blue-50">
+          <div className="container mx-auto px-4">
+            <div className="max-w-md mx-auto text-center">
+              <Card className="border-0 shadow-2xl">
+                <CardHeader className="p-8">
+                  <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+                    <CheckCircle className="w-12 h-12 text-white" />
+                  </div>
+                  <CardTitle className="text-green-900 text-2xl font-bold leading-tight">
+                    Registration Confirmed!
+                  </CardTitle>
+                  <CardDescription className="text-green-700 text-lg leading-relaxed">
+                    Payment successful
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="p-8 space-y-6">
+                  <div className="bg-green-50 p-6 rounded-lg">
+                    <p className="text-gray-700 leading-relaxed">
+                      🎉 Congratulations! You've successfully registered for the MUNIQ Beginner Workshop. You will
+                      receive a confirmation email shortly with workshop details and joining instructions.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 text-sm text-gray-600">
+                    <p>📧 Check your email for confirmation</p>
+                    <p>📅 Workshop: 20th July</p>
+                    <p>🏆 Certificate will be provided</p>
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      setCurrentSection("home")
+                      scrollToSection("home")
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    Back to Homepage
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
+      <footer className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white py-16">
+        <div className="container mx-auto px-4">
+          <div className="grid md:grid-cols-4 gap-8 mb-12">
+            <div className="md:col-span-2">
+              <div className="flex items-center space-x-3 mb-6">
+                <Image src="/logo_c_bg.png" alt="MUNIQ Logo" width={50} height={50} />
+                <span className="text-3xl font-bold">MUNIQ by AJ</span>
+              </div>
+              <p className="text-blue-200 mb-6 text-lg leading-relaxed">
+                Where diplomats are built. Empowering the next generation of global leaders through comprehensive MUN
+                training.
+              </p>
+              <div className="flex space-x-4">
+                <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer">
+                  <Phone className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xl font-bold mb-6 leading-tight">Quick Links</h4>
+              <div className="space-y-3">
+                {["Home", "About", "Workshop", "Founders"].map((link) => (
+                  <button
+                    key={link}
+                    onClick={() => scrollToSection(link.toLowerCase())}
+                    className="block text-blue-200 hover:text-white transition-colors duration-300"
+                  >
+                    {link}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xl font-bold mb-6 leading-tight">Legal</h4>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowLegalPage("privacy")}
+                  className="block text-blue-200 hover:text-white transition-colors duration-300"
+                >
+                  Privacy Policy
+                </button>
+                <button
+                  onClick={() => setShowLegalPage("refund")}
+                  className="block text-blue-200 hover:text-white transition-colors duration-300"
+                >
+                  Refund Policy
+                </button>
+                <button
+                  onClick={() => setShowLegalPage("disclaimer")}
+                  className="block text-blue-200 hover:text-white transition-colors duration-300"
+                >
+                  Disclaimer
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <Separator className="bg-blue-700 mb-8" />
+
+          <div className="text-center">
+            <p className="text-blue-300 mb-2 leading-relaxed">© 2025 MUNIQ by AJ. All rights reserved.</p>
+            <p className="text-blue-400 text-sm leading-relaxed">
+              Contact: muniqbyaj@gmail.com | Built with ❤️ for future diplomats
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Legal Pages Modal/Overlay */}
+      {showLegalPage && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+              <h1 className="text-3xl font-bold text-blue-900 leading-tight">
+                {showLegalPage === "privacy" && "Privacy Policy"}
+                {showLegalPage === "refund" && "Refund Policy"}
+                {showLegalPage === "disclaimer" && "Disclaimer"}
+              </h1>
+              <Button
+                onClick={() => setShowLegalPage(null)}
+                variant="outline"
+                size="sm"
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕ Close
+              </Button>
+            </div>
+
+            <div className="p-6">
+              {showLegalPage === "privacy" && (
+                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
+                  <p>
+                    <strong>Effective Date:</strong> July 11, 2025
+                  </p>
+                  <p>
+                    This Privacy Policy describes how MUNIQ by AJ ("we", "us", or "our") collects, uses, shares, and
+                    protects personal information provided by users ("you" or "your") when registering for our workshop
+                    through our website.
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
+                    1. Information We Collect
+                  </h2>
+                  <p>
+                    When you register or make a payment on our website, we collect the following personal information:
+                  </p>
+                  <ul className="list-disc pl-6 space-y-2">
+                    <li>Full Name</li>
+                    <li>Email Address</li>
+                    <li>Phone Number</li>
+                    <li>Institution Name</li>
+                    <li>Age / Class / Designation (if applicable)</li>
+                    <li>Payment Details (processed securely through Razorpay)</li>
+                  </ul>
+                  <p>
+                    We do not store any sensitive payment data such as card numbers or CVV. All such transactions are
+                    securely processed via Razorpay.
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
+                    2. Use of Your Information
+                  </h2>
+                  <p>We use your data solely for the purpose of:</p>
+                  <ul className="list-disc pl-6 space-y-2">
+                    <li>Registering you for the MUN workshop</li>
+                    <li>Sending you confirmation, updates, or event-related notifications</li>
+                    <li>Processing payments and issuing receipts</li>
+                    <li>Generating participation certificates</li>
+                    <li>Internal reporting and feedback collection</li>
+                  </ul>
+                  <p>
+                    We do not use your personal information for marketing or share it with third parties without your
+                    explicit consent.
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
+                    3. Payment Processing via Razorpay
+                  </h2>
+                  <p>
+                    We use Razorpay to handle all payments. Razorpay is PCI-DSS compliant, ensuring your payment data is
+                    encrypted and handled with high security standards.
+                  </p>
+                  <p>
+                    For more details on Razorpay's privacy practices, please visit:{" "}
+                    <a
+                      href="https://razorpay.com/privacy/"
+                      className="text-blue-600 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      https://razorpay.com/privacy/
+                    </a>
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">4. Contact Us</h2>
+                  <p>If you have any concerns or queries about this Privacy Policy, you can reach out to:</p>
+                  <p>📧 Email: muniqbyaj@gmail.com</p>
+                </div>
+              )}
+
+              {showLegalPage === "refund" && (
+                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">1. No Return of Services</h2>
+                  <p>
+                    As this is an educational event, the services (registration, participation, training sessions,
+                    materials, etc.) are intangible and time-bound. Therefore, once a registration is completed and
+                    payment is made, returns are not applicable.
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">2. Refund Eligibility</h2>
+                  <p>We offer refunds only under the following exceptional circumstances:</p>
+                  <ul className="list-disc pl-6 space-y-2">
+                    <li>
+                      <strong>Double Payment:</strong> If a delegate has made more than one payment for the same
+                      registration due to a technical or manual error.
+                    </li>
+                    <li>
+                      <strong>Event Cancellation:</strong> If the event is cancelled by the organizers, a full refund
+                      will be issued to all registered participants.
+                    </li>
+                    <li>
+                      <strong>Eligibility Error:</strong> If you registered but later found ineligible due to age,
+                      background, or other specific workshop prerequisites outlined during registration, and if this is
+                      communicated within 48 hours of payment.
+                    </li>
+                  </ul>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">3. Contact</h2>
+                  <p>For any questions regarding this policy or to initiate a refund request, please contact:</p>
+                  <p>📧 Email: muniqbyaj@gmail.com</p>
+                </div>
+              )}
+
+              {showLegalPage === "disclaimer" && (
+                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
+                  <p>
+                    <strong>Effective Date:</strong> July 11, 2025
+                  </p>
+                  <p>
+                    By using this website and registering for MUNIQ by AJ ("we", "us", or "our"), you agree to the
+                    following terms and conditions:
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">1. Information Accuracy</h2>
+                  <p>
+                    All information provided on this website is for general informational purposes only. While we strive
+                    to ensure accuracy, we do not guarantee that all details, dates, or content are error-free or
+                    complete.
+                  </p>
+
+                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">2. Contact</h2>
+                  <p>For any queries, please contact us at:</p>
+                  <p>📧 Email: muniqbyaj@gmail.com</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
