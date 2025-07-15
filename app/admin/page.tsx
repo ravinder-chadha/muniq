@@ -221,6 +221,51 @@ export default function AdminPage() {
     }
   }
 
+  const getPaymentStatusForRegistration = (registrationId: string) => {
+    const payment = payments.find(p => p.registration_id === registrationId)
+    if (!payment) {
+      return { status: 'unpaid', payment: null }
+    }
+    return { status: payment.status, payment }
+  }
+
+  const getPaymentStatusBadge = (registrationId: string) => {
+    const { status, payment } = getPaymentStatusForRegistration(registrationId)
+    
+    switch (status) {
+      case 'completed':
+        return (
+          <Badge className="bg-green-100 text-green-800" title={`Paid ₹${payment?.amount} on ${payment?.created_at ? formatDate(payment.created_at) : 'Unknown date'}`}>
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Paid ₹{payment?.amount}
+          </Badge>
+        )
+      case 'pending':
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800" title={`Payment of ₹${payment?.amount} is pending`}>
+            <Clock className="w-3 h-3 mr-1" />
+            Pending ₹{payment?.amount}
+          </Badge>
+        )
+      case 'failed':
+        return (
+          <Badge className="bg-red-100 text-red-800" title={`Payment of ₹${payment?.amount} failed`}>
+            <XCircle className="w-3 h-3 mr-1" />
+            Failed ₹{payment?.amount}
+          </Badge>
+        )
+      case 'unpaid':
+        return (
+          <Badge className="bg-gray-100 text-gray-800" title="No payment received">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            Unpaid
+          </Badge>
+        )
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -322,13 +367,39 @@ export default function AdminPage() {
         {/* Registrations Section */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="w-5 h-5 mr-2" />
-              Registrations ({registrations.length})
-            </CardTitle>
-            <CardDescription>
-              All registered users for the workshop
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center">
+                  <Users className="w-5 h-5 mr-2" />
+                  Registrations ({registrations.length})
+                </CardTitle>
+                <CardDescription>
+                  All registered users for the workshop
+                </CardDescription>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Badge className="bg-green-100 text-green-800">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Paid: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'completed').length}
+                </Badge>
+                <Badge className="bg-yellow-100 text-yellow-800">
+                  <Clock className="w-3 h-3 mr-1" />
+                  Pending: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'pending').length}
+                </Badge>
+                <Badge className="bg-red-100 text-red-800">
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Failed: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'failed').length}
+                </Badge>
+                <Badge className="bg-gray-100 text-gray-800">
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Unpaid: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length}
+                </Badge>
+                <Badge className="bg-blue-100 text-blue-800">
+                  <CreditCard className="w-3 h-3 mr-1" />
+                  Revenue: ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {registrations.length === 0 ? (
@@ -342,9 +413,12 @@ export default function AdminPage() {
                     <CardContent className="p-4">
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                          <h4 className="font-semibold text-lg mb-2">
-                            {registration.first_name} {registration.last_name}
-                          </h4>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-lg">
+                              {registration.first_name} {registration.last_name}
+                            </h4>
+                            {getPaymentStatusBadge(registration.id)}
+                          </div>
                           <div className="space-y-1 text-sm text-gray-600">
                             <div className="flex items-center">
                               <Mail className="w-4 h-4 mr-2" />
