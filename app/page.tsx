@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -53,9 +54,9 @@ export default function MuniqWebsite() {
     munExperience: "",
     email: "",
     contact: "",
+    agreedToTerms: false,
   })
 
-  const [showLegalPage, setShowLegalPage] = useState<string | null>(null)
 
   useEffect(() => {
     // Load Razorpay script
@@ -77,7 +78,7 @@ export default function MuniqWebsite() {
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     // Remove field from errors when user starts typing
     if (formErrors.includes(field)) {
@@ -89,12 +90,19 @@ export default function MuniqWebsite() {
     const requiredFields = ["firstName", "lastName", "standard", "munExperience", "email"]
     const errors = requiredFields.filter((field) => !formData[field as keyof typeof formData])
 
+    // Check if terms are agreed to
+    if (!formData.agreedToTerms) {
+      errors.push("agreedToTerms")
+    }
+
     setFormErrors(errors)
 
     if (errors.length > 0) {
       toast({
         title: "Missing Required Fields",
-        description: "Please fill in all mandatory fields marked with *",
+        description: !formData.agreedToTerms 
+          ? "Please agree to the Terms & Conditions to proceed"
+          : "Please fill in all mandatory fields marked with *",
         variant: "destructive",
       })
       return false
@@ -114,8 +122,7 @@ export default function MuniqWebsite() {
         }),
       )
 
-      // Here you would typically save to your database
-      // For now, we'll simulate an API call
+      // Save to database
       const response = await fetch("/api/register", {
         method: "POST",
         headers: {
@@ -125,13 +132,28 @@ export default function MuniqWebsite() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to save registration data")
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to save registration data")
       }
 
-      console.log("Registration data saved successfully")
+      const responseData = await response.json()
+      console.log("Registration data saved successfully:", responseData.data.id)
+      
+      // Store registration ID for payment
+      localStorage.setItem("muniq_registration_id", responseData.data.id)
+      
+      return responseData.data
     } catch (error) {
       console.error("Error saving registration data:", error)
-      // Still proceed with payment even if saving fails
+      
+      // Show error to user
+      toast({
+        title: "Registration Error",
+        description: error instanceof Error ? error.message : "Failed to save registration data",
+        variant: "destructive",
+      })
+      
+      throw error // Re-throw to prevent proceeding to payment
     }
   }
 
@@ -140,11 +162,27 @@ export default function MuniqWebsite() {
       return
     }
 
-    // Save form data
-    await saveFormData(formData)
-
-    setCurrentSection("payment")
-    scrollToSection("payment")
+    try {
+      // Save form data and get registration ID
+      const registrationData = await saveFormData(formData)
+      
+      // Check if Razorpay is configured
+      if (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID !== 'rzp_test_1234567890') {
+        setCurrentSection("payment")
+        scrollToSection("payment")
+      } else {
+        // Show success message for testing without payment
+        setCurrentSection("confirmation")
+        scrollToSection("confirmation")
+        toast({
+          title: "Registration Successful!",
+          description: "Your registration has been saved. Payment integration will be available when Razorpay is configured.",
+        })
+      }
+    } catch (error) {
+      // Error already handled in saveFormData
+      console.error("Registration failed:", error)
+    }
   }
 
   const handlePayment = () => {
@@ -157,27 +195,72 @@ export default function MuniqWebsite() {
       name: "MUNIQ by AJ",
       description: "Beginner MUN Workshop Registration",
       image: "/logo_c_bg.png",
-      handler: (response: any) => {
+      handler: async (response: any) => {
         setIsLoading(false)
-        setCurrentSection("confirmation")
-        scrollToSection("confirmation")
+        
+        try {
+          // Get registration ID from localStorage
+          const registrationId = localStorage.getItem("muniq_registration_id")
+          
+          if (!registrationId) {
+            throw new Error("Registration ID not found")
+          }
 
-        // Save payment info
-        const paymentData = {
-          ...formData,
-          paymentId: response.razorpay_payment_id,
-          orderId: response.razorpay_order_id,
-          signature: response.razorpay_signature,
-          amount: 11,
-          timestamp: new Date().toISOString(),
+          // Save payment info to database
+          const paymentData = {
+            registrationId,
+            paymentId: response.razorpay_payment_id,
+            orderId: response.razorpay_order_id,
+            signature: response.razorpay_signature,
+            amount: 11,
+            currency: "INR"
+          }
+
+          const paymentResponse = await fetch("/api/payment", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(paymentData),
+          })
+
+          if (!paymentResponse.ok) {
+            const errorData = await paymentResponse.json()
+            throw new Error(errorData.message || "Failed to save payment data")
+          }
+
+          // Save payment info to localStorage as backup
+          const completePaymentData = {
+            ...formData,
+            paymentId: response.razorpay_payment_id,
+            orderId: response.razorpay_order_id,
+            signature: response.razorpay_signature,
+            amount: 11,
+            timestamp: new Date().toISOString(),
+          }
+
+          localStorage.setItem("muniq_payment", JSON.stringify(completePaymentData))
+
+          setCurrentSection("confirmation")
+          scrollToSection("confirmation")
+
+          toast({
+            title: "Payment Successful!",
+            description: "Your registration has been confirmed. Check your email for details.",
+          })
+        } catch (error) {
+          console.error("Error saving payment:", error)
+          
+          // Still show success but with a warning
+          setCurrentSection("confirmation")
+          scrollToSection("confirmation")
+          
+          toast({
+            title: "Payment Successful!",
+            description: "Payment received, but there was an issue saving the data. Please contact support if needed.",
+            variant: "destructive",
+          })
         }
-
-        localStorage.setItem("muniq_payment", JSON.stringify(paymentData))
-
-        toast({
-          title: "Payment Successful!",
-          description: "Your registration has been confirmed. Check your email for details.",
-        })
       },
       prefill: {
         name: `${formData.firstName} ${formData.lastName}`,
@@ -239,7 +322,7 @@ const handleBrochureDownload = () => {
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => scrollToSection("home")}>
               <div className="relative">
                 <Image
-                  src="/logo_c_bg.png"
+                  src="/logo.png"
                   alt="MUNIQ Logo"
                   width={45}
                   height={45}
@@ -565,12 +648,11 @@ const handleBrochureDownload = () => {
                     <h4 className="text-2xl font-bold text-blue-900 mb-6 leading-tight">Topics Covered</h4>
                     <div className="space-y-4">
                       {[
-                        "Introduction to Model UN",
-                        "Rules of Procedure",
-                        "Research Techniques",
-                        "Public Speaking Skills",
-                        "Negotiation Strategies",
-                        "Resolution Writing",
+                        "How to prepare for MUNs",
+                        "Research Hacks",
+                        "Making Strong Points",
+                        "Winning Debates, Not Fights",
+                        "Secret Tips to Win",
                       ].map((topic, index) => (
                         <div
                           key={topic}
@@ -902,9 +984,64 @@ const handleBrochureDownload = () => {
                   />
                 </div>
 
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <input
+                      id="agreedToTerms"
+                      type="checkbox"
+                      checked={formData.agreedToTerms}
+                      onChange={(e) => handleInputChange("agreedToTerms", e.target.checked)}
+                      className={`mt-1 h-4 w-4 rounded border-2 transition-colors duration-300 ${
+                        formErrors.includes("agreedToTerms")
+                          ? "border-red-500 focus:border-red-500"
+                          : "border-blue-300 focus:border-blue-500"
+                      }`}
+                      required
+                    />
+                    <Label htmlFor="agreedToTerms" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
+                      I agree to the{" "}
+                      <Link
+                        href="/terms"
+                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                        target="_blank"
+                      >
+                        Terms & Conditions
+                      </Link>
+                      ,{" "}
+                      <Link
+                        href="/privacy"
+                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                        target="_blank"
+                      >
+                        Privacy Policy
+                      </Link>
+                      , and{" "}
+                      <Link
+                        href="/refund"
+                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                        target="_blank"
+                      >
+                        Cancellation & Refund Policy
+                      </Link>
+                      . *
+                    </Label>
+                  </div>
+                  {formErrors.includes("agreedToTerms") && (
+                    <div className="flex items-center text-red-500 text-sm mt-1">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      You must agree to the Terms & Conditions to proceed
+                    </div>
+                  )}
+                </div>
+
                 <Button
                   onClick={handleRegistration}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  disabled={!formData.agreedToTerms}
+                  className={`w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ${
+                    !formData.agreedToTerms
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                  }`}
                   size="lg"
                 >
                   <ArrowRight className="w-5 h-5 mr-2" />
@@ -1046,12 +1183,29 @@ const handleBrochureDownload = () => {
                 training.
               </p>
               <div className="flex space-x-4">
-                <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer">
+                <a 
+                  href="mailto:muniqbyaj@gmail.com"
+                  className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer"
+                  title="Email us"
+                >
                   <Mail className="w-5 h-5" />
-                </div>
-                <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer">
+                </a>
+                <a 
+                  href="tel:+917889244978"
+                  className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer"
+                  title="Call us"
+                >
                   <Phone className="w-5 h-5" />
-                </div>
+                </a>
+                <a 
+                  href="https://www.instagram.com/muniqbyaj"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors duration-300 cursor-pointer"
+                  title="Follow us on Instagram"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                </a>
               </div>
             </div>
 
@@ -1073,24 +1227,36 @@ const handleBrochureDownload = () => {
             <div>
               <h4 className="text-xl font-bold mb-6 leading-tight">Legal</h4>
               <div className="space-y-3">
-                <button
-                  onClick={() => setShowLegalPage("privacy")}
+                <Link
+                  href="/privacy"
                   className="block text-blue-200 hover:text-white transition-colors duration-300"
                 >
                   Privacy Policy
-                </button>
-                <button
-                  onClick={() => setShowLegalPage("refund")}
+                </Link>
+                <Link
+                  href="/refund"
                   className="block text-blue-200 hover:text-white transition-colors duration-300"
                 >
-                  Refund Policy
-                </button>
-                <button
-                  onClick={() => setShowLegalPage("disclaimer")}
+                  Cancellation & Refunds
+                </Link>
+                <Link
+                  href="/terms"
                   className="block text-blue-200 hover:text-white transition-colors duration-300"
                 >
-                  Disclaimer
-                </button>
+                  Terms & Conditions
+                </Link>
+                <Link
+                  href="/shipping"
+                  className="block text-blue-200 hover:text-white transition-colors duration-300"
+                >
+                  Shipping Policy
+                </Link>
+                <Link
+                  href="/contact"
+                  className="block text-blue-200 hover:text-white transition-colors duration-300"
+                >
+                  Contact Us
+                </Link>
               </div>
             </div>
           </div>
@@ -1106,157 +1272,7 @@ const handleBrochureDownload = () => {
         </div>
       </footer>
 
-      {/* Legal Pages Modal/Overlay */}
-      {showLegalPage && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-blue-900 leading-tight">
-                {showLegalPage === "privacy" && "Privacy Policy"}
-                {showLegalPage === "refund" && "Refund Policy"}
-                {showLegalPage === "disclaimer" && "Disclaimer"}
-              </h1>
-              <Button
-                onClick={() => setShowLegalPage(null)}
-                variant="outline"
-                size="sm"
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕ Close
-              </Button>
-            </div>
 
-            <div className="p-6">
-              {showLegalPage === "privacy" && (
-                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
-                  <p>
-                    <strong>Effective Date:</strong> July 11, 2025
-                  </p>
-                  <p>
-                    This Privacy Policy describes how MUNIQ by AJ ("we", "us", or "our") collects, uses, shares, and
-                    protects personal information provided by users ("you" or "your") when registering for our workshop
-                    through our website.
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
-                    1. Information We Collect
-                  </h2>
-                  <p>
-                    When you register or make a payment on our website, we collect the following personal information:
-                  </p>
-                  <ul className="list-disc pl-6 space-y-2">
-                    <li>Full Name</li>
-                    <li>Email Address</li>
-                    <li>Phone Number</li>
-                    <li>Institution Name</li>
-                    <li>Age / Class / Designation (if applicable)</li>
-                    <li>Payment Details (processed securely through Razorpay)</li>
-                  </ul>
-                  <p>
-                    We do not store any sensitive payment data such as card numbers or CVV. All such transactions are
-                    securely processed via Razorpay.
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
-                    2. Use of Your Information
-                  </h2>
-                  <p>We use your data solely for the purpose of:</p>
-                  <ul className="list-disc pl-6 space-y-2">
-                    <li>Registering you for the MUN workshop</li>
-                    <li>Sending you confirmation, updates, or event-related notifications</li>
-                    <li>Processing payments and issuing receipts</li>
-                    <li>Generating participation certificates</li>
-                    <li>Internal reporting and feedback collection</li>
-                  </ul>
-                  <p>
-                    We do not use your personal information for marketing or share it with third parties without your
-                    explicit consent.
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">
-                    3. Payment Processing via Razorpay
-                  </h2>
-                  <p>
-                    We use Razorpay to handle all payments. Razorpay is PCI-DSS compliant, ensuring your payment data is
-                    encrypted and handled with high security standards.
-                  </p>
-                  <p>
-                    For more details on Razorpay's privacy practices, please visit:{" "}
-                    <a
-                      href="https://razorpay.com/privacy/"
-                      className="text-blue-600 hover:underline"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      https://razorpay.com/privacy/
-                    </a>
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">4. Contact Us</h2>
-                  <p>If you have any concerns or queries about this Privacy Policy, you can reach out to:</p>
-                  <p>📧 Email: muniqbyaj@gmail.com</p>
-                </div>
-              )}
-
-              {showLegalPage === "refund" && (
-                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">1. No Return of Services</h2>
-                  <p>
-                    As this is an educational event, the services (registration, participation, training sessions,
-                    materials, etc.) are intangible and time-bound. Therefore, once a registration is completed and
-                    payment is made, returns are not applicable.
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">2. Refund Eligibility</h2>
-                  <p>We offer refunds only under the following exceptional circumstances:</p>
-                  <ul className="list-disc pl-6 space-y-2">
-                    <li>
-                      <strong>Double Payment:</strong> If a delegate has made more than one payment for the same
-                      registration due to a technical or manual error.
-                    </li>
-                    <li>
-                      <strong>Event Cancellation:</strong> If the event is cancelled by the organizers, a full refund
-                      will be issued to all registered participants.
-                    </li>
-                    <li>
-                      <strong>Eligibility Error:</strong> If you registered but later found ineligible due to age,
-                      background, or other specific workshop prerequisites outlined during registration, and if this is
-                      communicated within 48 hours of payment.
-                    </li>
-                  </ul>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">3. Contact</h2>
-                  <p>For any questions regarding this policy or to initiate a refund request, please contact:</p>
-                  <p>📧 Email: muniqbyaj@gmail.com</p>
-                </div>
-              )}
-
-              {showLegalPage === "disclaimer" && (
-                <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
-                  <p>
-                    <strong>Effective Date:</strong> July 11, 2025
-                  </p>
-                  <p>
-                    By using this website and registering for MUNIQ by AJ ("we", "us", or "our"), you agree to the
-                    following terms and conditions:
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">1. Information Accuracy</h2>
-                  <p>
-                    All information provided on this website is for general informational purposes only. While we strive
-                    to ensure accuracy, we do not guarantee that all details, dates, or content are error-free or
-                    complete.
-                  </p>
-
-                  <h2 className="text-2xl font-bold text-blue-900 mt-8 mb-4 leading-tight">2. Contact</h2>
-                  <p>For any queries, please contact us at:</p>
-                  <p>📧 Email: muniqbyaj@gmail.com</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
