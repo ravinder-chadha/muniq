@@ -759,7 +759,7 @@ const handleBrochureDownload = () => {
                     <div className="w-32 h-32 rounded-full mx-auto overflow-hidden shadow-xl group-hover:shadow-2xl transition-all duration-300 group-hover:scale-110">
                       <Image
                         src="/oj-photo.jpeg"
-                        alt="Om Jhani"
+                        alt="Om Jhanji"
                         width={128}
                         height={128}
                         className="w-full h-full object-cover"
@@ -768,7 +768,7 @@ const handleBrochureDownload = () => {
                     <div className="absolute -inset-4 bg-gradient-to-r from-indigo-400/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-lg"></div>
                   </div>
                   <CardTitle className="text-blue-900 text-2xl mb-2 group-hover:text-blue-600 transition-colors duration-300 leading-tight">
-                    Om Jhani
+                    Om Jhanji
                   </CardTitle>
                   <CardDescription className="text-blue-700 font-semibold text-lg leading-tight">
                     Co-Founder & Strategy Director
