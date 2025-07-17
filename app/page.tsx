@@ -166,132 +166,152 @@ export default function MuniqWebsite() {
       // Save form data and get registration ID
       const registrationData = await saveFormData(formData)
       
-      // Check if Razorpay is configured
-      if (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID && process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID !== 'rzp_test_1234567890') {
-        setCurrentSection("payment")
-        scrollToSection("payment")
-      } else {
-        // Show success message for testing without payment
-        setCurrentSection("confirmation")
-        scrollToSection("confirmation")
-        toast({
-          title: "Registration Successful!",
-          description: "Your registration has been saved. Payment integration will be available when Razorpay is configured.",
-        })
-      }
+      // Always proceed to payment section after registration
+      console.log("Razorpay Key ID:", process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
+      setCurrentSection("payment")
+      scrollToSection("payment")
     } catch (error) {
       // Error already handled in saveFormData
       console.error("Registration failed:", error)
     }
   }
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     setIsLoading(true)
 
-    const options = {
-      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_1234567890",
-      amount: 1100, // ₹11 in paise
-      currency: "INR",
-      name: "MUNIQ by AJ",
-      description: "Beginner MUN Workshop Registration",
-      image: "/logo_c_bg.png",
-      handler: async (response: any) => {
-        setIsLoading(false)
-        
-        try {
-          // Get registration ID from localStorage
-          const registrationId = localStorage.getItem("muniq_registration_id")
-          
-          if (!registrationId) {
-            throw new Error("Registration ID not found")
-          }
+    try {
+      // Get registration ID from localStorage
+      const registrationId = localStorage.getItem("muniq_registration_id")
+      
+      if (!registrationId) {
+        throw new Error("Registration ID not found")
+      }
 
-          // Save payment info to database
-          const paymentData = {
-            registrationId,
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id,
-            signature: response.razorpay_signature,
-            amount: 11,
-            currency: "INR"
-          }
-
-          const paymentResponse = await fetch("/api/payment", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(paymentData),
-          })
-
-          if (!paymentResponse.ok) {
-            const errorData = await paymentResponse.json()
-            throw new Error(errorData.message || "Failed to save payment data")
-          }
-
-          // Save payment info to localStorage as backup
-          const completePaymentData = {
-            ...formData,
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id,
-            signature: response.razorpay_signature,
-            amount: 11,
-            timestamp: new Date().toISOString(),
-          }
-
-          localStorage.setItem("muniq_payment", JSON.stringify(completePaymentData))
-
-          setCurrentSection("confirmation")
-          scrollToSection("confirmation")
-
-          toast({
-            title: "Payment Successful!",
-            description: "Your registration has been confirmed. Check your email for details.",
-          })
-        } catch (error) {
-          console.error("Error saving payment:", error)
-          
-          // Still show success but with a warning
-          setCurrentSection("confirmation")
-          scrollToSection("confirmation")
-          
-          toast({
-            title: "Payment Successful!",
-            description: "Payment received, but there was an issue saving the data. Please contact support if needed.",
-            variant: "destructive",
-          })
-        }
-      },
-      prefill: {
-        name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
-        contact: formData.contact,
-      },
-      notes: {
-        standard: formData.standard,
-        institution: formData.institution,
-        munExperience: formData.munExperience,
-      },
-      theme: {
-        color: "#1e40af",
-      },
-      modal: {
-        ondismiss: () => {
-          setIsLoading(false)
+      // Step 1: Create order on server
+      const orderResponse = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      },
-    }
+        body: JSON.stringify({
+          amount: 11, // ₹11
+          currency: "INR",
+          registrationId,
+          customerDetails: {
+            name: `${formData.firstName} ${formData.lastName}`,
+            email: formData.email,
+            contact: formData.contact,
+          }
+        }),
+      })
 
-    if (window.Razorpay) {
-      const rzp = new window.Razorpay(options)
-      rzp.open()
-    } else {
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json()
+        throw new Error(errorData.message || "Failed to create payment order")
+      }
+
+      const orderData = await orderResponse.json()
+
+      // Step 2: Initialize Razorpay with order
+      const options = {
+        key: orderData.data.keyId,
+        amount: orderData.data.amount,
+        currency: orderData.data.currency,
+        order_id: orderData.data.orderId,
+        name: "MUNIQ by AJ",
+        description: "Beginner MUN Workshop Registration",
+        image: "/logo_c_bg.png",
+        handler: async (response: any) => {
+          try {
+            // Step 3: Verify payment on server
+            const verificationResponse = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                registrationId,
+              }),
+            })
+
+            if (!verificationResponse.ok) {
+              const errorData = await verificationResponse.json()
+              throw new Error(errorData.message || "Payment verification failed")
+            }
+
+            const verificationData = await verificationResponse.json()
+
+            // Save payment info to localStorage as backup
+            const completePaymentData = {
+              ...formData,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              signature: response.razorpay_signature,
+              amount: 11,
+              timestamp: new Date().toISOString(),
+              verified: true,
+            }
+
+            localStorage.setItem("muniq_payment", JSON.stringify(completePaymentData))
+
+            setCurrentSection("confirmation")
+            scrollToSection("confirmation")
+
+            toast({
+              title: "Payment Successful!",
+              description: "Thank you for registering for MUNIQ. Your registration has been confirmed.",
+            })
+          } catch (error) {
+            console.error("Error verifying payment:", error)
+            
+            toast({
+              title: "Payment Verification Failed",
+              description: error instanceof Error ? error.message : "Please contact support with your payment details.",
+              variant: "destructive",
+            })
+          } finally {
+            setIsLoading(false)
+          }
+        },
+        prefill: {
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          contact: formData.contact,
+        },
+        notes: {
+          standard: formData.standard,
+          institution: formData.institution,
+          munExperience: formData.munExperience,
+        },
+        theme: {
+          color: "#1e40af",
+        },
+        modal: {
+          ondismiss: () => {
+            setIsLoading(false)
+          },
+        },
+      }
+
+      if (window.Razorpay) {
+        const rzp = new window.Razorpay(options)
+        rzp.open()
+      } else {
+        throw new Error("Razorpay not loaded")
+      }
+
+    } catch (error) {
+      console.error("Error initiating payment:", error)
+      setIsLoading(false)
+      
       toast({
         title: "Payment Error",
-        description: "Payment gateway not loaded. Please refresh and try again.",
+        description: error instanceof Error ? error.message : "Failed to initiate payment. Please try again.",
         variant: "destructive",
       })
-      setIsLoading(false)
     }
   }
 
@@ -1148,7 +1168,6 @@ const handleBrochureDownload = () => {
                   </div>
 
                   <div className="space-y-3 text-sm text-gray-600">
-                    <p>📧 Check your email for confirmation</p>
                     <p>📅 Workshop: 20th July</p>
                     <p>🏆 Certificate will be provided</p>
                   </div>
