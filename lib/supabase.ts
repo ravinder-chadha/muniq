@@ -24,6 +24,8 @@ export interface Payment {
   amount: number
   currency: string
   status: 'pending' | 'completed' | 'failed'
+  payment_screenshot_url?: string
+  payment_method?: 'razorpay' | 'qr_code' | 'manual'
   created_at?: string
   updated_at?: string
 }

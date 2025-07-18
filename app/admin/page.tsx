@@ -51,6 +51,8 @@ interface Payment {
   amount: number
   currency: string
   status: string
+  payment_screenshot_url?: string
+  payment_method?: 'razorpay' | 'qr_code' | 'manual'
   created_at: string
   updated_at: string
   registrations?: {
@@ -394,6 +396,12 @@ export default function AdminPage() {
                   <AlertCircle className="w-3 h-3 mr-1" />
                   Unpaid: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length}
                 </Badge>
+                <Badge className="bg-orange-100 text-orange-800">
+                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M3 4h18a1 1 0 011 1v14a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v12h16V6H4zm2 2h12v2H6V8zm0 4h8v2H6v-2z"/>
+                  </svg>
+                  QR Payments: {payments.filter(p => p.payment_method === 'qr_code' && p.status === 'completed').length}
+                </Badge>
                 <Badge className="bg-blue-100 text-blue-800">
                   <CreditCard className="w-3 h-3 mr-1" />
                   Revenue: ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
@@ -487,21 +495,41 @@ export default function AdminPage() {
                 {payments.map((payment) => (
                   <Card key={payment.id} className="border-l-4 border-l-green-500">
                     <CardContent className="p-4">
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="md:col-span-2">
                           <div className="flex items-center gap-2 mb-2">
                             <h4 className="font-semibold">
                               {payment.registrations?.first_name} {payment.registrations?.last_name}
                             </h4>
                             {getStatusBadge(payment.status)}
+                            {payment.payment_method && (
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs ${
+                                  payment.payment_method === 'qr_code' 
+                                    ? 'bg-orange-100 text-orange-800 border-orange-300' 
+                                    : payment.payment_method === 'razorpay'
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : 'bg-gray-100 text-gray-800 border-gray-300'
+                                }`}
+                              >
+                                {payment.payment_method === 'qr_code' ? 'QR Payment' : 
+                                 payment.payment_method === 'razorpay' ? 'Razorpay' : 'Manual'}
+                              </Badge>
+                            )}
                           </div>
                           <div className="space-y-1 text-sm text-gray-600">
                             <div>Email: {payment.registrations?.email}</div>
                             <div>Amount: ₹{payment.amount} {payment.currency}</div>
                             <div>Payment ID: {payment.payment_id}</div>
                             {payment.order_id && <div>Order ID: {payment.order_id}</div>}
+                            {payment.payment_method && (
+                              <div>Method: {payment.payment_method === 'qr_code' ? 'QR Code Payment' : 
+                                         payment.payment_method === 'razorpay' ? 'Razorpay Gateway' : 'Manual Entry'}</div>
+                            )}
                           </div>
                         </div>
+                        
                         <div className="text-right">
                           <div className="text-sm text-gray-500 mb-2">
                             <div className="flex items-center justify-end">
@@ -509,9 +537,54 @@ export default function AdminPage() {
                               {formatDate(payment.created_at)}
                             </div>
                           </div>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-xs mb-3">
                             ID: {payment.id.slice(0, 8)}...
                           </Badge>
+                          
+                          {/* Screenshot Display */}
+                          {payment.payment_screenshot_url && (
+                            <div className="mt-3">
+                              <p className="text-xs text-gray-500 mb-2">Payment Screenshot:</p>
+                              <div className="border rounded-lg p-2 bg-gray-50">
+                                <img 
+                                  src={payment.payment_screenshot_url} 
+                                  alt="Payment Screenshot"
+                                  className="w-full h-32 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => window.open(payment.payment_screenshot_url, '_blank')}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.nextElementSibling!.classList.remove('hidden');
+                                  }}
+                                />
+                                <div className="hidden text-center text-xs text-gray-500 py-8">
+                                  <p>Failed to load screenshot</p>
+                                  <a 
+                                    href={payment.payment_screenshot_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    View Original
+                                  </a>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => window.open(payment.payment_screenshot_url, '_blank')}
+                                variant="outline"
+                                size="sm"
+                                className="w-full mt-2 text-xs"
+                              >
+                                View Full Screenshot
+                              </Button>
+                            </div>
+                          )}
+                          
+                          {payment.payment_method === 'qr_code' && !payment.payment_screenshot_url && (
+                            <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-center">
+                              <p className="text-xs text-yellow-700">QR Payment - No screenshot uploaded</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -543,9 +616,16 @@ export default function AdminPage() {
             </div>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-2">3. Test Payment (when Razorpay is ready)</h4>
+              <h4 className="font-semibold mb-2">3. Test QR Code Payment</h4>
               <p className="text-sm text-gray-600">
-                After setting up Razorpay, complete the full registration flow including payment. The payment data will appear in the Payments section.
+                Complete the registration flow and upload a payment screenshot using the QR code method. The payment will automatically be marked as completed.
+              </p>
+            </div>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-2">4. Test Razorpay Payment (when ready)</h4>
+              <p className="text-sm text-gray-600">
+                After setting up Razorpay production keys, test the online payment gateway. Both payment methods will appear in the Payments section.
               </p>
             </div>
           </CardContent>

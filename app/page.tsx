@@ -44,6 +44,9 @@ export default function MuniqWebsite() {
   const [currentSection, setCurrentSection] = useState("home")
   const [isLoading, setIsLoading] = useState(false)
   const [formErrors, setFormErrors] = useState<string[]>([])
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     firstName: "",
@@ -74,7 +77,12 @@ export default function MuniqWebsite() {
     setCurrentSection(sectionId)
     const element = document.getElementById(sectionId)
     if (element) {
-      element.scrollIntoView({ behavior: "smooth" })
+      // Scroll with some offset from the top to ensure good visibility
+      const elementPosition = element.offsetTop - 80
+      window.scrollTo({
+        top: elementPosition,
+        behavior: "smooth"
+      })
     }
   }
 
@@ -169,7 +177,11 @@ export default function MuniqWebsite() {
       // Always proceed to payment section after registration
       console.log("Razorpay Key ID:", process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
       setCurrentSection("payment")
-      scrollToSection("payment")
+      
+      // Add a small delay to ensure the payment section is rendered before scrolling
+      setTimeout(() => {
+        scrollToSection("payment")
+      }, 100)
     } catch (error) {
       // Error already handled in saveFormData
       console.error("Registration failed:", error)
@@ -314,6 +326,121 @@ export default function MuniqWebsite() {
       })
     }
   }
+
+const handleScreenshotUpload = async () => {
+  if (!selectedFile) {
+    toast({
+      title: "No File Selected",
+      description: "Please select a payment screenshot to upload",
+      variant: "destructive",
+    })
+    return
+  }
+
+  const registrationId = localStorage.getItem("muniq_registration_id")
+  if (!registrationId) {
+    toast({
+      title: "Registration Error",
+      description: "Registration ID not found. Please register again.",
+      variant: "destructive",
+    })
+    return
+  }
+
+  setIsUploading(true)
+  setUploadProgress(0)
+
+  try {
+    const formData = new FormData()
+    formData.append('screenshot', selectedFile)
+    formData.append('registrationId', registrationId)
+
+    // Simulate upload progress
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressInterval)
+          return prev
+        }
+        return prev + 10
+      })
+    }, 100)
+
+    const response = await fetch('/api/payment/upload-screenshot', {
+      method: 'POST',
+      body: formData
+    })
+
+    clearInterval(progressInterval)
+    setUploadProgress(100)
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Upload failed')
+    }
+
+    const responseData = await response.json()
+
+    // Save payment info to localStorage as backup
+    const completePaymentData = {
+      ...formData,
+      paymentId: responseData.data.paymentId,
+      amount: responseData.data.amount,
+      timestamp: new Date().toISOString(),
+      verified: true,
+      paymentMethod: 'qr_code',
+      screenshotUrl: responseData.data.screenshotUrl
+    }
+
+    localStorage.setItem("muniq_payment", JSON.stringify(completePaymentData))
+
+    setCurrentSection("confirmation")
+    scrollToSection("confirmation")
+
+    toast({
+      title: "Payment Confirmed!",
+      description: "Your payment screenshot has been uploaded successfully. Registration confirmed!",
+    })
+
+  } catch (error) {
+    console.error("Error uploading screenshot:", error)
+    toast({
+      title: "Upload Failed",
+      description: error instanceof Error ? error.message : "Failed to upload screenshot. Please try again.",
+      variant: "destructive",
+    })
+  } finally {
+    setIsUploading(false)
+    setUploadProgress(0)
+  }
+}
+
+const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0]
+  if (file) {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please select a valid image file (PNG, JPG, JPEG)",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "File size must be less than 10MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSelectedFile(file)
+  }
+}
 
 const handleBrochureDownload = () => {
   const pdfPath = "/Muniq_pamphlet.pdf"; // Updated to match the actual file name
@@ -1077,12 +1204,31 @@ const handleBrochureDownload = () => {
       {currentSection === "payment" && (
         <section id="payment" className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
           <div className="container mx-auto px-4">
-            <div className="max-w-md mx-auto">
+            <div className="max-w-md mx-auto space-y-6">
+              
+              {/* Razorpay Coming Soon Notice */}
+              <Card className="border-2 border-yellow-200 bg-yellow-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="text-yellow-600">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-yellow-800">Razorpay Payment Gateway Coming Soon!</p>
+                      <p className="text-xs text-yellow-700">Online payment will be available within 1-2 days.</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* QR Code Payment Option */}
               <Card className="border-0 shadow-2xl">
-                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center p-8">
-                  <CardTitle className="text-2xl font-bold leading-tight">Complete Payment</CardTitle>
-                  <CardDescription className="text-blue-100 text-lg leading-relaxed">
-                    Secure payment via Razorpay
+                <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white text-center p-8">
+                  <CardTitle className="text-2xl font-bold leading-tight">Early Registration Payment</CardTitle>
+                  <CardDescription className="text-green-100 text-lg leading-relaxed">
+                    Pay via QR Code & WhatsApp
                   </CardDescription>
                 </CardHeader>
 
@@ -1095,7 +1241,7 @@ const handleBrochureDownload = () => {
                     <p className="text-gray-600 mb-6 leading-relaxed">Beginner Workshop</p>
                   </div>
 
-                  <div className="space-y-3 text-left bg-blue-50 p-6 rounded-lg">
+                  <div className="space-y-3 text-left bg-green-50 p-6 rounded-lg">
                     <p className="flex justify-between">
                       <strong>Name:</strong>
                       <span>
@@ -1112,30 +1258,191 @@ const handleBrochureDownload = () => {
                     </p>
                   </div>
 
+                  {/* QR Code Section */}
+                  <div className="bg-white p-6 rounded-lg border-2 border-green-200 text-center">
+                    <h3 className="font-bold text-lg mb-4 text-green-800">Scan QR Code to Pay ₹11</h3>
+                    <div className="flex justify-center mb-4">
+                      <div className="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                        <img 
+                          src="/payment-qr.jpeg" 
+                          alt="Payment QR Code" 
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            target.nextElementSibling!.classList.remove('hidden');
+                          }}
+                        />
+                        <div className="hidden text-gray-500 text-center p-4">
+                          <p className="text-sm font-medium">QR Code</p>
+                          <p className="text-xs">Image will be added soon</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-center mb-4">
+                      <p className="text-sm text-gray-600 mb-2">
+                        Scan this QR code with any UPI app to pay ₹11
+                      </p>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 inline-block">
+                        <p className="text-xs text-blue-700 font-medium">UPI ID:</p>
+                        <p className="text-sm font-mono font-bold text-blue-900 select-all">7889244978@axl</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Or copy this UPI ID to pay manually
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="bg-blue-50 p-6 rounded-lg space-y-4">
+                    <h3 className="font-bold text-lg text-blue-800">Payment Instructions:</h3>
+                    <ol className="space-y-2 text-sm text-blue-700">
+                      <li className="flex items-start gap-2">
+                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span>
+                        <span>Scan the QR code above and pay <strong>₹11</strong> using any UPI app</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span>
+                        <span>Take a screenshot of the successful payment</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span>
+                        <span>Upload the payment screenshot below to confirm your registration</span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* File Upload Section */}
+                  <div className="bg-orange-50 p-6 rounded-lg border-2 border-orange-200 space-y-4">
+                    <h3 className="font-bold text-lg text-orange-800">Upload Payment Screenshot</h3>
+                    
+                    <div className="border-2 border-dashed border-orange-300 rounded-lg p-6 text-center">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        id="screenshot-upload"
+                        disabled={isUploading}
+                      />
+                      <label 
+                        htmlFor="screenshot-upload" 
+                        className={`cursor-pointer flex flex-col items-center space-y-3 ${isUploading ? 'cursor-not-allowed opacity-50' : ''}`}
+                      >
+                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                          <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-orange-800 font-semibold">
+                            {selectedFile ? selectedFile.name : "Click to upload payment screenshot"}
+                          </p>
+                          <p className="text-orange-600 text-sm">
+                            PNG, JPG, JPEG up to 10MB
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {selectedFile && (
+                      <div className="flex items-center justify-between bg-white p-3 rounded-lg border">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                            <p className="text-xs text-gray-500">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedFile(null)}
+                          className="text-red-500 hover:text-red-700"
+                          disabled={isUploading}
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm text-orange-700">
+                          <span>Uploading...</span>
+                          <span>{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-orange-200 rounded-full h-2">
+                          <div 
+                            className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Button */}
                   <Button
-                    onClick={handlePayment}
-                    disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    onClick={handleScreenshotUpload}
+                    disabled={!selectedFile || isUploading}
+                    className={`w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ${
+                      !selectedFile || isUploading
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                    }`}
                     size="lg"
                   >
-                    {isLoading ? (
+                    {isUploading ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                        Processing...
+                        Uploading Screenshot...
                       </>
                     ) : (
                       <>
-                        <ExternalLink className="w-5 h-5 mr-2" />
-                        Pay ₹11 with Razorpay
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Confirm Payment & Complete Registration
                       </>
                     )}
                   </Button>
 
                   <p className="text-xs text-gray-500 text-center leading-relaxed">
-                    Secured by Razorpay. Your payment information is encrypted and secure.
+                    Your payment will be automatically confirmed once the screenshot is uploaded successfully.
                   </p>
                 </CardContent>
               </Card>
+
+              {/* Razorpay Option (Disabled/Coming Soon) */}
+              <Card className="border-2 border-gray-200 bg-gray-50 opacity-60">
+                <CardHeader className="bg-gradient-to-r from-gray-400 to-gray-500 text-white text-center p-6">
+                  <CardTitle className="text-xl font-bold leading-tight">Online Payment</CardTitle>
+                  <CardDescription className="text-gray-200 text-base leading-relaxed">
+                    Coming Soon - Razorpay Integration
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="p-6 space-y-4">
+                  <Button
+                    disabled={true}
+                    className="w-full bg-gray-400 cursor-not-allowed text-lg py-6"
+                    size="lg"
+                  >
+                    <ExternalLink className="w-5 h-5 mr-2" />
+                    Pay ₹11 with Razorpay (Coming Soon)
+                  </Button>
+
+                  <p className="text-xs text-gray-500 text-center leading-relaxed">
+                    Secured by Razorpay. Will be available within 1-2 days.
+                  </p>
+                </CardContent>
+              </Card>
+
             </div>
           </div>
         </section>
