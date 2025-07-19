@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
       dob: data.dob || null,
       standard: data.standard,
       institution: data.institution || null,
-      mun_experience: data.munExperience
+      mun_experience: data.munExperience,
+      workshop_slot: '4-6pm' // All new registrations go to the new slot
     }
 
     // Save to database

@@ -11,6 +11,7 @@ export interface Registration {
   standard: string
   institution?: string
   mun_experience: string
+  workshop_slot?: '2-4pm' | '4-6pm'
   created_at?: string
   updated_at?: string
 }

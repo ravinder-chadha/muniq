@@ -38,6 +38,7 @@ interface Registration {
   standard: string
   institution?: string
   mun_experience: string
+  workshop_slot?: '2-4pm' | '4-6pm'
   created_at: string
   updated_at: string
 }
@@ -366,111 +367,221 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Registrations Section */}
+        {/* Registrations Section - Grouped by Slots */}
+        {['2-4pm', '4-6pm'].map(slot => {
+          // Better slot filtering logic
+          const slotRegistrations = registrations.filter(r => {
+            if (slot === '2-4pm') {
+              // For 2-4pm slot: include registrations with '2-4pm' or null/undefined slot
+              return r.workshop_slot === '2-4pm' || !r.workshop_slot
+            } else {
+              // For 4-6pm slot: only include exact matches
+              return r.workshop_slot === '4-6pm'
+            }
+          })
+          
+          const slotPaidCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'completed').length
+          const slotPendingCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'pending').length
+          const slotFailedCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'failed').length
+          const slotUnpaidCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length
+          const slotRevenue = slotRegistrations.reduce((sum, r) => {
+            const payment = payments.find(p => p.registration_id === r.id && p.status === 'completed')
+            return sum + (payment ? payment.amount : 0)
+          }, 0)
+          
+          // Always show both slots, even if empty
+          const shouldShow = true
+          
+          return (
+            <Card key={slot} className={`${slot === '2-4pm' ? 'border-red-200' : 'border-green-200'}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center">
+                      <Users className="w-5 h-5 mr-2" />
+                      {slot === '2-4pm' ? 'Slot 1: 2:00 PM - 4:00 PM' : 'Slot 2: 4:00 PM - 6:00 PM'} ({slotRegistrations.length})
+                      <Badge 
+                        className={`ml-3 ${slot === '2-4pm' 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-green-100 text-green-800'
+                        }`}
+                      >
+                        {slot === '2-4pm' ? 'CLOSED' : 'AVAILABLE'}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      {slot === '2-4pm' 
+                        ? 'Previous registrations (slot full)' 
+                        : 'Current registrations (accepting new)'
+                      }
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Badge className="bg-green-100 text-green-800">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Paid: {slotPaidCount}
+                    </Badge>
+                    <Badge className="bg-yellow-100 text-yellow-800">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Pending: {slotPendingCount}
+                    </Badge>
+                    <Badge className="bg-red-100 text-red-800">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Failed: {slotFailedCount}
+                    </Badge>
+                    <Badge className="bg-gray-100 text-gray-800">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      Unpaid: {slotUnpaidCount}
+                    </Badge>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      <CreditCard className="w-3 h-3 mr-1" />
+                      Revenue: ₹{slotRevenue}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {slotRegistrations.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="mb-2">
+                      {slot === '2-4pm' 
+                        ? '📅 No registrations found for this slot yet.' 
+                        : '🆕 No new registrations for this slot yet.'
+                      }
+                    </div>
+                    <div className="text-sm">
+                      {slot === '2-4pm' 
+                        ? 'This slot is closed for new registrations.' 
+                        : 'This slot is open for new registrations. Try testing the registration form!'
+                      }
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {slotRegistrations.map((registration) => (
+                      <Card key={registration.id} className={`border-l-4 ${slot === '2-4pm' ? 'border-l-red-500' : 'border-l-green-500'}`}>
+                        <CardContent className="p-4">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold text-lg">
+                                  {registration.first_name} {registration.last_name}
+                                </h4>
+                                {getPaymentStatusBadge(registration.id)}
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${slot === '2-4pm' 
+                                    ? 'bg-red-50 text-red-700 border-red-300' 
+                                    : 'bg-green-50 text-green-700 border-green-300'
+                                  }`}
+                                >
+                                  {slot === '2-4pm' ? '2-4 PM' : '4-6 PM'}
+                                </Badge>
+                              </div>
+                              <div className="space-y-1 text-sm text-gray-600">
+                                <div className="flex items-center">
+                                  <Mail className="w-4 h-4 mr-2" />
+                                  {registration.email}
+                                </div>
+                                {registration.contact && (
+                                  <div className="flex items-center">
+                                    <Phone className="w-4 h-4 mr-2" />
+                                    {registration.contact}
+                                  </div>
+                                )}
+                                <div className="flex items-center">
+                                  <GraduationCap className="w-4 h-4 mr-2" />
+                                  {registration.standard}
+                                </div>
+                                {registration.institution && (
+                                  <div className="flex items-center">
+                                    <Building className="w-4 h-4 mr-2" />
+                                    {registration.institution}
+                                  </div>
+                                )}
+                                <div className="flex items-center">
+                                  <Trophy className="w-4 h-4 mr-2" />
+                                  MUN Experience: {registration.mun_experience}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm text-gray-500 mb-2">
+                                <div className="flex items-center justify-end">
+                                  <Calendar className="w-4 h-4 mr-1" />
+                                  {formatDate(registration.created_at)}
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                ID: {registration.id.slice(0, 8)}...
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
+
+        {/* Overall Statistics */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  Registrations ({registrations.length})
-                </CardTitle>
-                <CardDescription>
-                  All registered users for the workshop
-                </CardDescription>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <Badge className="bg-green-100 text-green-800">
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  Paid: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'completed').length}
-                </Badge>
-                <Badge className="bg-yellow-100 text-yellow-800">
-                  <Clock className="w-3 h-3 mr-1" />
-                  Pending: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'pending').length}
-                </Badge>
-                <Badge className="bg-red-100 text-red-800">
-                  <XCircle className="w-3 h-3 mr-1" />
-                  Failed: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'failed').length}
-                </Badge>
-                <Badge className="bg-gray-100 text-gray-800">
-                  <AlertCircle className="w-3 h-3 mr-1" />
-                  Unpaid: {registrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length}
-                </Badge>
-                <Badge className="bg-orange-100 text-orange-800">
-                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 4h18a1 1 0 011 1v14a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v12h16V6H4zm2 2h12v2H6V8zm0 4h8v2H6v-2z"/>
-                  </svg>
-                  QR Payments: {payments.filter(p => p.payment_method === 'qr_code' && p.status === 'completed').length}
-                </Badge>
-                <Badge className="bg-blue-100 text-blue-800">
-                  <CreditCard className="w-3 h-3 mr-1" />
-                  Revenue: ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
-                </Badge>
-              </div>
-            </div>
+            <CardTitle className="flex items-center">
+              <Users className="w-5 h-5 mr-2" />
+              Overall Statistics ({registrations.length} Total)
+            </CardTitle>
+            <CardDescription>
+              Combined statistics for all slots
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {registrations.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No registrations found. Try testing the registration form!
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-semibold mb-3">Slot Breakdown</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-red-700">Slot 1 (2-4 PM):</span>
+                    <Badge className="bg-red-100 text-red-800">
+                      {registrations.filter(r => r.workshop_slot === '2-4pm' || !r.workshop_slot).length} registrations
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-green-700">Slot 2 (4-6 PM):</span>
+                    <Badge className="bg-green-100 text-green-800">
+                      {registrations.filter(r => r.workshop_slot === '4-6pm').length} registrations
+                    </Badge>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {registrations.map((registration) => (
-                  <Card key={registration.id} className="border-l-4 border-l-blue-500">
-                    <CardContent className="p-4">
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <h4 className="font-semibold text-lg">
-                              {registration.first_name} {registration.last_name}
-                            </h4>
-                            {getPaymentStatusBadge(registration.id)}
-                          </div>
-                          <div className="space-y-1 text-sm text-gray-600">
-                            <div className="flex items-center">
-                              <Mail className="w-4 h-4 mr-2" />
-                              {registration.email}
-                            </div>
-                            {registration.contact && (
-                              <div className="flex items-center">
-                                <Phone className="w-4 h-4 mr-2" />
-                                {registration.contact}
-                              </div>
-                            )}
-                            <div className="flex items-center">
-                              <GraduationCap className="w-4 h-4 mr-2" />
-                              {registration.standard}
-                            </div>
-                            {registration.institution && (
-                              <div className="flex items-center">
-                                <Building className="w-4 h-4 mr-2" />
-                                {registration.institution}
-                              </div>
-                            )}
-                            <div className="flex items-center">
-                              <Trophy className="w-4 h-4 mr-2" />
-                              MUN Experience: {registration.mun_experience}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm text-gray-500 mb-2">
-                            <div className="flex items-center justify-end">
-                              <Calendar className="w-4 h-4 mr-1" />
-                              {formatDate(registration.created_at)}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            ID: {registration.id.slice(0, 8)}...
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              
+              <div>
+                <h4 className="font-semibold mb-3">Payment Methods</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-orange-700">QR Payments:</span>
+                    <Badge className="bg-orange-100 text-orange-800">
+                      {payments.filter(p => p.payment_method === 'qr_code' && p.status === 'completed').length}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-blue-700">Razorpay Payments:</span>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      {payments.filter(p => p.payment_method === 'razorpay' && p.status === 'completed').length}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-green-700">Total Revenue:</span>
+                    <Badge className="bg-green-100 text-green-800">
+                      ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
+                    </Badge>
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 

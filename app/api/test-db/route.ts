@@ -30,11 +30,12 @@ export async function GET(request: NextRequest) {
         })
 
       case 'registrations':
-        // Get all registrations (for testing purposes)
+        // Get all registrations (for testing purposes) - explicitly set high limit
         const { data: registrations, error } = await supabaseAdmin
           .from('registrations')
           .select('*')
           .order('created_at', { ascending: false })
+          .limit(10000) // Explicitly set high limit to get all registrations
 
         if (error) {
           throw error
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
         })
 
       case 'payments':
-        // Get all payments (for testing purposes)
+        // Get all payments (for testing purposes) - explicitly set high limit
         const { data: payments, error: paymentError } = await supabaseAdmin
           .from('payments')
           .select(`
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
             )
           `)
           .order('created_at', { ascending: false })
+          .limit(10000) // Explicitly set high limit to get all payments
 
         if (paymentError) {
           throw paymentError

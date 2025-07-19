@@ -946,7 +946,46 @@ const handleBrochureDownload = () => {
               <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
                 Register for Workshop
               </h2>
-              <p className="text-xl text-gray-600 leading-relaxed">Join the diplomatic revolution today</p>
+              <p className="text-xl text-gray-600 leading-relaxed mb-8">Join the diplomatic revolution today</p>
+              
+              {/* Slot Information */}
+              <div className="grid md:grid-cols-2 gap-4 mb-8">
+                {/* Closed Slot */}
+                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-center mb-2">
+                    <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <h3 className="font-bold text-red-800">Slot 1: 2:00 PM - 4:00 PM</h3>
+                  </div>
+                  <p className="text-red-600 font-semibold">CLOSED</p>
+                  <p className="text-red-600 text-sm">Registration Full</p>
+                </div>
+                
+                {/* Available Slot */}
+                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-center mb-2">
+                    <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <h3 className="font-bold text-green-800">Slot 2: 4:00 PM - 6:00 PM</h3>
+                  </div>
+                  <p className="text-green-600 font-semibold">AVAILABLE</p>
+                  <p className="text-green-600 text-sm">Register Now!</p>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-center mb-2">
+                  <svg className="w-5 h-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <h4 className="font-semibold text-blue-800">New Registrations</h4>
+                </div>
+                <p className="text-blue-700 text-sm">
+                  All new registrations will be automatically assigned to <strong>Slot 2 (4:00 PM - 6:00 PM)</strong>
+                </p>
+              </div>
             </div>
 
             <Card className="border-0 shadow-2xl animate-fade-in-up animation-delay-300">
@@ -1264,7 +1303,7 @@ const handleBrochureDownload = () => {
                     <div className="flex justify-center mb-4">
                       <div className="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
                         <img 
-                          src="/payment-qr.jpeg" 
+                          src="/payment-qr2.jpeg" 
                           alt="Payment QR Code" 
                           className="w-full h-full object-contain"
                           onError={(e) => {
@@ -1285,7 +1324,7 @@ const handleBrochureDownload = () => {
                       </p>
                       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 inline-block">
                         <p className="text-xs text-blue-700 font-medium">UPI ID:</p>
-                        <p className="text-sm font-mono font-bold text-blue-900 select-all">7889244978@axl</p>
+                        <p className="text-sm font-mono font-bold text-blue-900 select-all">8699397771@ptsbi</p>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
                         Or copy this UPI ID to pay manually
