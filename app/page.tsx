@@ -44,9 +44,7 @@ export default function MuniqWebsite() {
   const [currentSection, setCurrentSection] = useState("home")
   const [isLoading, setIsLoading] = useState(false)
   const [formErrors, setFormErrors] = useState<string[]>([])
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [isUploading, setIsUploading] = useState(false)
+  const [selectedCourse, setSelectedCourse] = useState<any>(null)
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     firstName: "",
@@ -60,7 +58,6 @@ export default function MuniqWebsite() {
     agreedToTerms: false,
   })
 
-
   useEffect(() => {
     // Load Razorpay script
     const script = document.createElement("script")
@@ -68,10 +65,16 @@ export default function MuniqWebsite() {
     script.async = true
     document.body.appendChild(script)
 
+    // Check for selected course in localStorage
+    const savedCourse = localStorage.getItem('selected_course')
+    if (savedCourse) {
+      setSelectedCourse(JSON.parse(savedCourse))
+    }
+
     return () => {
       document.body.removeChild(script)
     }
-  }, [])
+  }, [currentSection])
 
   const scrollToSection = (sectionId: string) => {
     setCurrentSection(sectionId)
@@ -126,17 +129,25 @@ export default function MuniqWebsite() {
         "muniq_registration",
         JSON.stringify({
           ...data,
+          courseDetails: selectedCourse,
           timestamp: new Date().toISOString(),
         }),
       )
 
-      // Save to database
+      // Save to database with course information
+      const registrationData = {
+        ...data,
+        course_id: selectedCourse?.id,
+        course_name: selectedCourse?.name,
+        course_price: selectedCourse?.price,
+      }
+
       const response = await fetch("/api/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(registrationData),
       })
 
       if (!response.ok) {
@@ -175,7 +186,6 @@ export default function MuniqWebsite() {
       const registrationData = await saveFormData(formData)
       
       // Always proceed to payment section after registration
-      console.log("Razorpay Key ID:", process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
       setCurrentSection("payment")
       
       // Add a small delay to ensure the payment section is rendered before scrolling
@@ -199,6 +209,10 @@ export default function MuniqWebsite() {
         throw new Error("Registration ID not found")
       }
 
+      if (!selectedCourse) {
+        throw new Error("No course selected")
+      }
+
       // Step 1: Create order on server
       const orderResponse = await fetch("/api/payment/create-order", {
         method: "POST",
@@ -206,9 +220,15 @@ export default function MuniqWebsite() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: 11, // ₹11
+          amount: selectedCourse.price,
           currency: "INR",
           registrationId,
+          courseDetails: {
+            id: selectedCourse.id,
+            name: selectedCourse.name,
+            price: selectedCourse.price,
+            originalPrice: selectedCourse.originalPrice
+          },
           customerDetails: {
             name: `${formData.firstName} ${formData.lastName}`,
             email: formData.email,
@@ -231,7 +251,7 @@ export default function MuniqWebsite() {
         currency: orderData.data.currency,
         order_id: orderData.data.orderId,
         name: "MUNIQ by AJ",
-        description: "Beginner MUN Workshop Registration",
+        description: `${selectedCourse.name} Registration`,
         image: "/logo_c_bg.png",
         handler: async (response: any) => {
           try {
@@ -246,6 +266,7 @@ export default function MuniqWebsite() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 registrationId,
+                courseDetails: selectedCourse,
               }),
             })
 
@@ -259,10 +280,11 @@ export default function MuniqWebsite() {
             // Save payment info to localStorage as backup
             const completePaymentData = {
               ...formData,
+              courseDetails: selectedCourse,
               paymentId: response.razorpay_payment_id,
               orderId: response.razorpay_order_id,
               signature: response.razorpay_signature,
-              amount: 11,
+              amount: selectedCourse.price,
               timestamp: new Date().toISOString(),
               verified: true,
             }
@@ -274,7 +296,7 @@ export default function MuniqWebsite() {
 
             toast({
               title: "Payment Successful!",
-              description: "Thank you for registering for MUNIQ. Your registration has been confirmed.",
+              description: `Thank you for enrolling in ${selectedCourse.name}. Your registration has been confirmed.`,
             })
           } catch (error) {
             console.error("Error verifying payment:", error)
@@ -294,6 +316,8 @@ export default function MuniqWebsite() {
           contact: formData.contact,
         },
         notes: {
+          course_id: selectedCourse.id,
+          course_name: selectedCourse.name,
           standard: formData.standard,
           institution: formData.institution,
           munExperience: formData.munExperience,
@@ -327,120 +351,7 @@ export default function MuniqWebsite() {
     }
   }
 
-const handleScreenshotUpload = async () => {
-  if (!selectedFile) {
-    toast({
-      title: "No File Selected",
-      description: "Please select a payment screenshot to upload",
-      variant: "destructive",
-    })
-    return
-  }
 
-  const registrationId = localStorage.getItem("muniq_registration_id")
-  if (!registrationId) {
-    toast({
-      title: "Registration Error",
-      description: "Registration ID not found. Please register again.",
-      variant: "destructive",
-    })
-    return
-  }
-
-  setIsUploading(true)
-  setUploadProgress(0)
-
-  try {
-    const formData = new FormData()
-    formData.append('screenshot', selectedFile)
-    formData.append('registrationId', registrationId)
-
-    // Simulate upload progress
-    const progressInterval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(progressInterval)
-          return prev
-        }
-        return prev + 10
-      })
-    }, 100)
-
-    const response = await fetch('/api/payment/upload-screenshot', {
-      method: 'POST',
-      body: formData
-    })
-
-    clearInterval(progressInterval)
-    setUploadProgress(100)
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Upload failed')
-    }
-
-    const responseData = await response.json()
-
-    // Save payment info to localStorage as backup
-    const completePaymentData = {
-      ...formData,
-      paymentId: responseData.data.paymentId,
-      amount: responseData.data.amount,
-      timestamp: new Date().toISOString(),
-      verified: true,
-      paymentMethod: 'qr_code',
-      screenshotUrl: responseData.data.screenshotUrl
-    }
-
-    localStorage.setItem("muniq_payment", JSON.stringify(completePaymentData))
-
-    setCurrentSection("confirmation")
-    scrollToSection("confirmation")
-
-    toast({
-      title: "Payment Confirmed!",
-      description: "Your payment screenshot has been uploaded successfully. Registration confirmed!",
-    })
-
-  } catch (error) {
-    console.error("Error uploading screenshot:", error)
-    toast({
-      title: "Upload Failed",
-      description: error instanceof Error ? error.message : "Failed to upload screenshot. Please try again.",
-      variant: "destructive",
-    })
-  } finally {
-    setIsUploading(false)
-    setUploadProgress(0)
-  }
-}
-
-const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0]
-  if (file) {
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please select a valid image file (PNG, JPG, JPEG)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "File size must be less than 10MB",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setSelectedFile(file)
-  }
-}
 
 const handleBrochureDownload = () => {
   const pdfPath = "/Muniq_pamphlet.pdf"; // Updated to match the actual file name
@@ -734,126 +645,324 @@ const handleBrochureDownload = () => {
       {/* Workshop Section */}
       <section id="workshop" className="py-20 bg-white">
         <div className="container mx-auto px-4">
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <div className="text-center mb-16 animate-fade-in-up">
               <Badge className="bg-red-100 text-red-800 px-6 py-2 text-lg font-semibold mb-6">
-                🔥 Limited Seats Available
+                🔥 Premium Courses Available
               </Badge>
               <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
-                Upcoming Workshop
+                Our Courses
               </h2>
-              <p className="text-xl text-gray-600 leading-relaxed">Transform your diplomatic skills in just 2 hours</p>
+              <p className="text-xl text-gray-600 leading-relaxed">Choose the perfect course to accelerate your diplomatic journey</p>
             </div>
 
-            <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up animation-delay-300">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-                  <div>
-                    <CardTitle className="text-3xl mb-3 font-bold leading-tight">Beginner Workshop</CardTitle>
-                    <CardDescription className="text-blue-100 text-lg leading-relaxed">
-                      Perfect for MUN newcomers and enthusiasts
-                    </CardDescription>
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* MUN Course */}
+              <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up">
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-3 font-bold leading-tight">MUN Mastery Course</CardTitle>
+                      <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                        Complete MUN training program
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Badge className="bg-white text-blue-600 font-semibold px-4 py-2">
+                        <Award className="w-4 h-4 mr-2" />
+                        Certificate
+                      </Badge>
+                      <Badge className="bg-red-500 text-white font-semibold px-4 py-2">
+                        Popular
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-3 mt-4 md:mt-0">
-                    <Badge className="bg-white text-blue-600 font-semibold px-4 py-2">
-                      <Award className="w-4 h-4 mr-2" />
-                      Certificate Provided
-                    </Badge>
-                    <Badge className="bg-red-500 text-white font-semibold px-4 py-2 animate-pulse">
-                      🔥 Few Slots Left
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
+                </CardHeader>
 
-              <CardContent className="p-8">
-                <div className="grid md:grid-cols-2 gap-12">
-                  <div className="space-y-6">
-                    <h4 className="text-2xl font-bold text-blue-900 mb-6 leading-tight">Workshop Details</h4>
+                <CardContent className="p-8">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="text-2xl font-bold text-gray-400 line-through">₹1500/-</div>
+                      <div className="text-4xl font-bold text-green-600">₹999/-</div>
+                      <Badge className="bg-green-100 text-green-800 font-bold">33% OFF!</Badge>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    <h4 className="text-xl font-bold text-blue-900 mb-4">What You'll Learn:</h4>
                     {[
-                      { icon: Clock, label: "Duration", value: "2 hours" },
-                      { icon: Globe, label: "Mode", value: "Online" },
-                      { icon: Calendar, label: "Date", value: "20th July" },
-                      { icon: MapPin, label: "Time", value: "To be announced" },
-                    ].map((item) => (
+                      "What is MUN?",
+                      "Rules of Procedures",
+                      "How to write an opening speech with real life examples",
+                      "Research and Analysis with real life examples",
+                      "Raising POO, Allegations",
+                      "Diplomacy and Mindset",
+                      "Draft Resolution",
+                      "Effective use of Chits",
+                      "How to make upto 50k as an EB and how to make career in MUN"
+                    ].map((topic, index) => (
                       <div
-                        key={item.label}
-                        className="flex items-center space-x-4 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors duration-300"
+                        key={topic}
+                        className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg"
                       >
-                        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
-                          <item.icon className="w-6 h-6 text-white" />
+                        <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                          {index + 1}
                         </div>
-                        <div>
-                          <span className="font-semibold text-blue-900">{item.label}:</span>
-                          <span className="ml-2 text-gray-700">{item.value}</span>
-                        </div>
+                        <span className="text-gray-700 font-medium text-sm">{topic}</span>
                       </div>
                     ))}
                   </div>
 
-                  <div>
-                    <h4 className="text-2xl font-bold text-blue-900 mb-6 leading-tight">Topics Covered</h4>
-                    <div className="space-y-4">
-                      {[
-                        "How to prepare for MUNs",
-                        "Research Hacks",
-                        "Making Strong Points",
-                        "Winning Debates, Not Fights",
-                        "Secret Tips to Win",
-                      ].map((topic, index) => (
-                        <div
-                          key={topic}
-                          className="flex items-center space-x-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg hover:from-blue-100 hover:to-indigo-100 transition-all duration-300"
-                        >
-                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {index + 1}
-                          </div>
-                          <span className="text-gray-700 font-medium">{topic}</span>
-                        </div>
-                      ))}
+                  <Button
+                    onClick={() => {
+                      localStorage.setItem('selected_course', JSON.stringify({
+                        id: 'mun_course',
+                        name: 'MUN Mastery Course',
+                        price: 999,
+                        originalPrice: 1500
+                      }));
+                      scrollToSection("registration");
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Enroll Now - ₹999
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* IP Course */}
+              <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up animation-delay-300">
+                <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white p-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-3 font-bold leading-tight">IP Mastery Course</CardTitle>
+                      <CardDescription className="text-green-100 text-lg leading-relaxed">
+                        Photography & Journalism excellence
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Badge className="bg-white text-green-600 font-semibold px-4 py-2">
+                        <Award className="w-4 h-4 mr-2" />
+                        Certificate
+                      </Badge>
                     </div>
                   </div>
-                </div>
+                </CardHeader>
 
-                <Separator className="my-8" />
-
-                <div className="text-center">
-                  <div className="mb-8">
+                <CardContent className="p-8">
+                  <div className="mb-6">
                     <div className="flex items-center justify-center gap-4 mb-4">
-                      <div className="text-2xl font-bold text-gray-400 line-through">₹499/-</div>
-                      <div className="text-4xl font-bold text-green-600">₹11/-</div>
-                      <Badge className="bg-green-100 text-green-800 font-bold">98% OFF!</Badge>
+                      <div className="text-2xl font-bold text-gray-400 line-through">₹999/-</div>
+                      <div className="text-4xl font-bold text-green-600">₹699/-</div>
+                      <Badge className="bg-green-100 text-green-800 font-bold">30% OFF!</Badge>
                     </div>
-                    <p className="text-gray-600 leading-relaxed">
-                      Includes certificate, materials, and lifetime access to resources
-                    </p>
-                    <p className="text-red-600 font-semibold mt-2">⚡ Limited Time Offer!</p>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <Button
-                      onClick={() => scrollToSection("registration")}
-                      size="lg"
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg px-8 py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-                    >
-                      <Sparkles className="w-5 h-5 mr-2" />
-                      Register Now
-                      <ArrowRight className="w-5 h-5 ml-2" />
-                    </Button>
-
-                    <Button
-                      onClick={handleBrochureDownload}
-                      variant="outline"
-                      size="lg"
-                      className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white text-lg px-8 py-4 transition-all duration-300 bg-transparent"
-                    >
-                      <Download className="w-5 h-5 mr-2" />
-                      Download Brochure
-                    </Button>
+                  <div className="space-y-4 mb-8">
+                    <h4 className="text-xl font-bold text-green-900 mb-4">What You'll Learn:</h4>
+                    {[
+                      "Tips to be the best photographer",
+                      "How to excel in Journalism", 
+                      "Marking scheme of IP",
+                      "Career in IP"
+                    ].map((topic, index) => (
+                      <div
+                        key={topic}
+                        className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg"
+                      >
+                        <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                          {index + 1}
+                        </div>
+                        <span className="text-gray-700 font-medium text-sm">{topic}</span>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+
+                  <Button
+                    onClick={() => {
+                      localStorage.setItem('selected_course', JSON.stringify({
+                        id: 'ip_course',
+                        name: 'IP Mastery Course',
+                        price: 699,
+                        originalPrice: 999
+                      }));
+                      scrollToSection("registration");
+                    }}
+                    className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Enroll Now - ₹699
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Strategic 1-1 Call */}
+              <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up animation-delay-600">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-3 font-bold leading-tight">Strategic 1-1 Call</CardTitle>
+                      <CardDescription className="text-purple-100 text-lg leading-relaxed">
+                        Personalized guidance session
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Badge className="bg-white text-purple-600 font-semibold px-4 py-2">
+                        <Users className="w-4 h-4 mr-2" />
+                        1-on-1
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-8">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="text-2xl font-bold text-gray-400 line-through">₹500/-</div>
+                      <div className="text-4xl font-bold text-green-600">₹349/-</div>
+                      <Badge className="bg-green-100 text-green-800 font-bold">30% OFF!</Badge>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    <h4 className="text-xl font-bold text-purple-900 mb-4">What You Get:</h4>
+                    <div className="bg-purple-50 p-6 rounded-lg">
+                      <p className="text-gray-700 leading-relaxed text-center font-medium">
+                        Gain individualized insights and personalized Model UN guidance through a dedicated one-on-one session with our experienced advisors. Get tailored strategies, personalized feedback, and answers to your specific questions.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center space-x-2 p-3 bg-purple-50 rounded-lg">
+                        <Clock className="w-5 h-5 text-purple-600" />
+                        <span className="text-sm font-medium">60 minutes</span>
+                      </div>
+                      <div className="flex items-center space-x-2 p-3 bg-purple-50 rounded-lg">
+                        <Users className="w-5 h-5 text-purple-600" />
+                        <span className="text-sm font-medium">1-on-1 Session</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      localStorage.setItem('selected_course', JSON.stringify({
+                        id: 'strategic_call',
+                        name: 'Strategic 1-1 Call',
+                        price: 349,
+                        originalPrice: 500
+                      }));
+                      
+                      // Show notification for strategic call
+                      toast({
+                        title: "Strategic 1-1 Call Selected",
+                        description: "Our team will reach out to you within 2 working days to schedule your personalized session.",
+                        duration: 5000,
+                      });
+                      
+                      scrollToSection("registration");
+                    }}
+                    className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    <Users className="w-5 h-5 mr-2" />
+                    Book Session - ₹349
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Workshop */}
+              <Card className="border-0 shadow-2xl overflow-hidden animate-fade-in-up animation-delay-900">
+                <CardHeader className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-3 font-bold leading-tight">Beginner Workshop</CardTitle>
+                      <CardDescription className="text-orange-100 text-lg leading-relaxed">
+                        Perfect for MUN newcomers
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Badge className="bg-white text-orange-600 font-semibold px-4 py-2">
+                        <Award className="w-4 h-4 mr-2" />
+                        Certificate
+                      </Badge>
+                      <Badge className="bg-red-500 text-white font-semibold px-4 py-2">
+                        Limited Seats
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-8">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <div className="text-4xl font-bold text-orange-600">₹499/-</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-4 mb-2">
+                        <Clock className="w-5 h-5 text-orange-600" />
+                        <span className="text-gray-700">2 hours</span>
+                        <Calendar className="w-5 h-5 text-orange-600" />
+                        <span className="text-gray-700">20th July</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    <h4 className="text-xl font-bold text-orange-900 mb-4">Topics Covered:</h4>
+                    {[
+                      "How to prepare for MUNs",
+                      "Research Hacks",
+                      "Making Strong Points",
+                      "Winning Debates, Not Fights",
+                      "Secret Tips to Win"
+                    ].map((topic, index) => (
+                      <div
+                        key={topic}
+                        className="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg"
+                      >
+                        <div className="w-6 h-6 bg-orange-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                          {index + 1}
+                        </div>
+                        <span className="text-gray-700 font-medium text-sm">{topic}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      localStorage.setItem('selected_course', JSON.stringify({
+                        id: 'workshop',
+                        name: 'Beginner Workshop',
+                        price: 499,
+                        originalPrice: 499
+                      }));
+                      scrollToSection("registration");
+                    }}
+                    className="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Register Now - ₹499
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Download Brochure Section */}
+            <div className="text-center mt-12">
+              <Button
+                onClick={handleBrochureDownload}
+                variant="outline"
+                size="lg"
+                className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white text-lg px-8 py-4 transition-all duration-300 bg-transparent"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                Download Course Brochure
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -944,541 +1053,463 @@ const handleBrochureDownload = () => {
                 🚀 Secure Your Spot
               </Badge>
               <h2 className="text-5xl font-bold bg-gradient-to-r from-blue-900 to-blue-600 bg-clip-text text-transparent mb-6 leading-tight">
-                Register for Workshop
+                {selectedCourse ? `Register for ${selectedCourse.name}` : "Choose a Course First"}
               </h2>
-              <p className="text-xl text-gray-600 leading-relaxed mb-8">Join the diplomatic revolution today</p>
+              <p className="text-xl text-gray-600 leading-relaxed mb-8">
+                {selectedCourse ? "Complete your registration and proceed to payment" : "Please select a course from above to continue"}
+              </p>
               
-              {/* Slot Information */}
-              <div className="grid md:grid-cols-2 gap-4 mb-8">
-                {/* Closed Slot */}
-                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
-                  <div className="flex items-center justify-center mb-2">
-                    <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    <h3 className="font-bold text-red-800">Slot 1: 2:00 PM - 4:00 PM</h3>
+              {/* Selected Course Information */}
+              {selectedCourse && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6 mb-8">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="bg-blue-600 text-white px-4 py-2 rounded-full">
+                      <h3 className="font-bold text-lg">{selectedCourse.name}</h3>
+                    </div>
                   </div>
-                  <p className="text-red-600 font-semibold">CLOSED</p>
-                  <p className="text-red-600 text-sm">Registration Full</p>
-                </div>
-                
-                {/* Available Slot */}
-                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-center mb-2">
-                    <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <h3 className="font-bold text-green-800">Slot 2: 4:00 PM - 6:00 PM</h3>
+                  <div className="flex items-center justify-center gap-4 mb-4">
+                    {selectedCourse.originalPrice !== selectedCourse.price && (
+                      <div className="text-xl font-bold text-gray-400 line-through">₹{selectedCourse.originalPrice}/-</div>
+                    )}
+                    <div className="text-3xl font-bold text-green-600">₹{selectedCourse.price}/-</div>
+                    {selectedCourse.originalPrice !== selectedCourse.price && (
+                      <Badge className="bg-green-100 text-green-800 font-bold">
+                        {Math.round((1 - selectedCourse.price / selectedCourse.originalPrice) * 100)}% OFF!
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-green-600 font-semibold">AVAILABLE</p>
-                  <p className="text-green-600 text-sm">Register Now!</p>
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      onClick={() => {
+                        localStorage.removeItem('selected_course')
+                        setSelectedCourse(null)
+                        scrollToSection("workshop")
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                    >
+                      Change Course
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div className="flex items-center justify-center mb-2">
-                  <svg className="w-5 h-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <h4 className="font-semibold text-blue-800">New Registrations</h4>
+              )}
+
+              {/* Course Selection Prompt */}
+              {!selectedCourse && (
+                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-8">
+                  <div className="flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-yellow-600 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <h3 className="text-xl font-bold text-yellow-800">No Course Selected</h3>
+                  </div>
+                  <p className="text-yellow-700 mb-4">
+                    Please select a course from our offerings above to proceed with registration.
+                  </p>
+                  <Button
+                    onClick={() => scrollToSection("workshop")}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    Browse Courses
+                  </Button>
                 </div>
-                <p className="text-blue-700 text-sm">
-                  All new registrations will be automatically assigned to <strong>Slot 2 (4:00 PM - 6:00 PM)</strong>
-                </p>
-              </div>
+              )}
             </div>
 
-            <Card className="border-0 shadow-2xl animate-fade-in-up animation-delay-300">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
-                <CardTitle className="text-2xl font-bold leading-tight">Registration Form</CardTitle>
-                <CardDescription className="text-blue-100 text-lg leading-relaxed">
-                  All fields marked with * are mandatory
-                </CardDescription>
-              </CardHeader>
+            {selectedCourse && (
+              <Card className="border-0 shadow-2xl animate-fade-in-up animation-delay-300">
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8">
+                  <CardTitle className="text-2xl font-bold leading-tight">Registration Form</CardTitle>
+                  <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                    All fields marked with * are mandatory
+                  </CardDescription>
+                </CardHeader>
 
-              <CardContent className="p-8 space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
+                <CardContent className="p-8 space-y-6">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName" className="text-blue-900 font-semibold">
+                        First Name *
+                      </Label>
+                      <Input
+                        id="firstName"
+                        value={formData.firstName}
+                        onChange={(e) => handleInputChange("firstName", e.target.value)}
+                        className={`border-2 transition-colors duration-300 ${
+                          formErrors.includes("firstName")
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-blue-200 focus:border-blue-500"
+                        }`}
+                        required
+                      />
+                      {formErrors.includes("firstName") && (
+                        <div className="flex items-center text-red-500 text-sm mt-1">
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          First name is required
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName" className="text-blue-900 font-semibold">
+                        Last Name *
+                      </Label>
+                      <Input
+                        id="lastName"
+                        value={formData.lastName}
+                        onChange={(e) => handleInputChange("lastName", e.target.value)}
+                        className={`border-2 transition-colors duration-300 ${
+                          formErrors.includes("lastName")
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-blue-200 focus:border-blue-500"
+                        }`}
+                        required
+                      />
+                      {formErrors.includes("lastName") && (
+                        <div className="flex items-center text-red-500 text-sm mt-1">
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          Last name is required
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-blue-900 font-semibold">
-                      First Name *
+                    <Label htmlFor="dob" className="text-blue-900 font-semibold">
+                      Date of Birth
                     </Label>
                     <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange("firstName", e.target.value)}
+                      id="dob"
+                      type="date"
+                      value={formData.dob}
+                      onChange={(e) => handleInputChange("dob", e.target.value)}
+                      className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="standard" className="text-blue-900 font-semibold">
+                      Standard (Education Level) *
+                    </Label>
+                    <Select value={formData.standard} onValueChange={(value) => handleInputChange("standard", value)}>
+                      <SelectTrigger
+                        className={`border-2 transition-colors duration-300 ${
+                          formErrors.includes("standard")
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-blue-200 focus:border-blue-500"
+                        }`}
+                      >
+                        <SelectValue placeholder="Select your standard" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9th">9th Grade</SelectItem>
+                        <SelectItem value="10th">10th Grade</SelectItem>
+                        <SelectItem value="11th">11th Grade</SelectItem>
+                        <SelectItem value="12th">12th Grade</SelectItem>
+                        <SelectItem value="undergraduate">Undergraduate</SelectItem>
+                        <SelectItem value="postgraduate">Postgraduate</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {formErrors.includes("standard") && (
+                      <div className="flex items-center text-red-500 text-sm mt-1">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        Please select your education level
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="institution" className="text-blue-900 font-semibold">
+                      Institution
+                    </Label>
+                    <Input
+                      id="institution"
+                      value={formData.institution}
+                      onChange={(e) => handleInputChange("institution", e.target.value)}
+                      className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                      placeholder="Your school/college name"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="munExperience" className="text-blue-900 font-semibold">
+                      MUN Experience *
+                    </Label>
+                    <Select
+                      value={formData.munExperience}
+                      onValueChange={(value) => handleInputChange("munExperience", value)}
+                    >
+                      <SelectTrigger
+                        className={`border-2 transition-colors duration-300 ${
+                          formErrors.includes("munExperience")
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-blue-200 focus:border-blue-500"
+                        }`}
+                      >
+                        <SelectValue placeholder="Select your MUN experience" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="beginner">Beginner (0 conferences)</SelectItem>
+                        <SelectItem value="intermediate">Intermediate (1-3 conferences)</SelectItem>
+                        <SelectItem value="advanced">Advanced (4+ conferences)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {formErrors.includes("munExperience") && (
+                      <div className="flex items-center text-red-500 text-sm mt-1">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        Please select your MUN experience level
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-blue-900 font-semibold">
+                      Email Address *
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange("email", e.target.value)}
                       className={`border-2 transition-colors duration-300 ${
-                        formErrors.includes("firstName")
+                        formErrors.includes("email")
                           ? "border-red-500 focus:border-red-500"
                           : "border-blue-200 focus:border-blue-500"
                       }`}
                       required
                     />
-                    {formErrors.includes("firstName") && (
+                    {formErrors.includes("email") && (
                       <div className="flex items-center text-red-500 text-sm mt-1">
                         <AlertCircle className="w-4 h-4 mr-1" />
-                        First name is required
+                        Valid email address is required
                       </div>
                     )}
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-blue-900 font-semibold">
-                      Last Name *
+                    <Label htmlFor="contact" className="text-blue-900 font-semibold">
+                      Contact Number
                     </Label>
                     <Input
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange("lastName", e.target.value)}
-                      className={`border-2 transition-colors duration-300 ${
-                        formErrors.includes("lastName")
-                          ? "border-red-500 focus:border-red-500"
-                          : "border-blue-200 focus:border-blue-500"
-                      }`}
-                      required
+                      id="contact"
+                      type="tel"
+                      value={formData.contact}
+                      onChange={(e) => handleInputChange("contact", e.target.value)}
+                      className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
+                      placeholder="+91 XXXXX XXXXX"
                     />
-                    {formErrors.includes("lastName") && (
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <input
+                        id="agreedToTerms"
+                        type="checkbox"
+                        checked={formData.agreedToTerms}
+                        onChange={(e) => handleInputChange("agreedToTerms", e.target.checked)}
+                        className={`mt-1 h-4 w-4 rounded border-2 transition-colors duration-300 ${
+                          formErrors.includes("agreedToTerms")
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-blue-300 focus:border-blue-500"
+                        }`}
+                        required
+                      />
+                      <Label htmlFor="agreedToTerms" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
+                        I agree to the{" "}
+                        <Link
+                          href="/terms"
+                          className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                          target="_blank"
+                        >
+                          Terms & Conditions
+                        </Link>
+                        ,{" "}
+                        <Link
+                          href="/privacy"
+                          className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                          target="_blank"
+                        >
+                          Privacy Policy
+                        </Link>
+                        , and{" "}
+                        <Link
+                          href="/refund"
+                          className="text-blue-600 hover:text-blue-800 underline font-semibold"
+                          target="_blank"
+                        >
+                          Cancellation & Refund Policy
+                        </Link>
+                        . *
+                      </Label>
+                    </div>
+                    {formErrors.includes("agreedToTerms") && (
                       <div className="flex items-center text-red-500 text-sm mt-1">
                         <AlertCircle className="w-4 h-4 mr-1" />
-                        Last name is required
+                        You must agree to the Terms & Conditions to proceed
                       </div>
                     )}
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="dob" className="text-blue-900 font-semibold">
-                    Date of Birth
-                  </Label>
-                  <Input
-                    id="dob"
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => handleInputChange("dob", e.target.value)}
-                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="standard" className="text-blue-900 font-semibold">
-                    Standard (Education Level) *
-                  </Label>
-                  <Select value={formData.standard} onValueChange={(value) => handleInputChange("standard", value)}>
-                    <SelectTrigger
-                      className={`border-2 transition-colors duration-300 ${
-                        formErrors.includes("standard")
-                          ? "border-red-500 focus:border-red-500"
-                          : "border-blue-200 focus:border-blue-500"
-                      }`}
-                    >
-                      <SelectValue placeholder="Select your standard" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="9th">9th Grade</SelectItem>
-                      <SelectItem value="10th">10th Grade</SelectItem>
-                      <SelectItem value="11th">11th Grade</SelectItem>
-                      <SelectItem value="12th">12th Grade</SelectItem>
-                      <SelectItem value="undergraduate">Undergraduate</SelectItem>
-                      <SelectItem value="postgraduate">Postgraduate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {formErrors.includes("standard") && (
-                    <div className="flex items-center text-red-500 text-sm mt-1">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      Please select your education level
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="institution" className="text-blue-900 font-semibold">
-                    Institution
-                  </Label>
-                  <Input
-                    id="institution"
-                    value={formData.institution}
-                    onChange={(e) => handleInputChange("institution", e.target.value)}
-                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
-                    placeholder="Your school/college name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="munExperience" className="text-blue-900 font-semibold">
-                    MUN Experience *
-                  </Label>
-                  <Select
-                    value={formData.munExperience}
-                    onValueChange={(value) => handleInputChange("munExperience", value)}
-                  >
-                    <SelectTrigger
-                      className={`border-2 transition-colors duration-300 ${
-                        formErrors.includes("munExperience")
-                          ? "border-red-500 focus:border-red-500"
-                          : "border-blue-200 focus:border-blue-500"
-                      }`}
-                    >
-                      <SelectValue placeholder="Select your MUN experience" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="beginner">Beginner (0 conferences)</SelectItem>
-                      <SelectItem value="intermediate">Intermediate (1-3 conferences)</SelectItem>
-                      <SelectItem value="advanced">Advanced (4+ conferences)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {formErrors.includes("munExperience") && (
-                    <div className="flex items-center text-red-500 text-sm mt-1">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      Please select your MUN experience level
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-blue-900 font-semibold">
-                    Email Address *
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`border-2 transition-colors duration-300 ${
-                      formErrors.includes("email")
-                        ? "border-red-500 focus:border-red-500"
-                        : "border-blue-200 focus:border-blue-500"
+                  <Button
+                    onClick={handleRegistration}
+                    disabled={!formData.agreedToTerms}
+                    className={`w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ${
+                      !formData.agreedToTerms
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
                     }`}
-                    required
-                  />
-                  {formErrors.includes("email") && (
-                    <div className="flex items-center text-red-500 text-sm mt-1">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      Valid email address is required
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="contact" className="text-blue-900 font-semibold">
-                    Contact Number
-                  </Label>
-                  <Input
-                    id="contact"
-                    type="tel"
-                    value={formData.contact}
-                    onChange={(e) => handleInputChange("contact", e.target.value)}
-                    className="border-2 border-blue-200 focus:border-blue-500 transition-colors duration-300"
-                    placeholder="+91 XXXXX XXXXX"
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <input
-                      id="agreedToTerms"
-                      type="checkbox"
-                      checked={formData.agreedToTerms}
-                      onChange={(e) => handleInputChange("agreedToTerms", e.target.checked)}
-                      className={`mt-1 h-4 w-4 rounded border-2 transition-colors duration-300 ${
-                        formErrors.includes("agreedToTerms")
-                          ? "border-red-500 focus:border-red-500"
-                          : "border-blue-300 focus:border-blue-500"
-                      }`}
-                      required
-                    />
-                    <Label htmlFor="agreedToTerms" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
-                      I agree to the{" "}
-                      <Link
-                        href="/terms"
-                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
-                        target="_blank"
-                      >
-                        Terms & Conditions
-                      </Link>
-                      ,{" "}
-                      <Link
-                        href="/privacy"
-                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
-                        target="_blank"
-                      >
-                        Privacy Policy
-                      </Link>
-                      , and{" "}
-                      <Link
-                        href="/refund"
-                        className="text-blue-600 hover:text-blue-800 underline font-semibold"
-                        target="_blank"
-                      >
-                        Cancellation & Refund Policy
-                      </Link>
-                      . *
-                    </Label>
-                  </div>
-                  {formErrors.includes("agreedToTerms") && (
-                    <div className="flex items-center text-red-500 text-sm mt-1">
-                      <AlertCircle className="w-4 h-4 mr-1" />
-                      You must agree to the Terms & Conditions to proceed
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  onClick={handleRegistration}
-                  disabled={!formData.agreedToTerms}
-                  className={`w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ${
-                    !formData.agreedToTerms
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                  }`}
-                  size="lg"
-                >
-                  <ArrowRight className="w-5 h-5 mr-2" />
-                  Proceed to Payment
-                </Button>
-              </CardContent>
-            </Card>
+                    size="lg"
+                  >
+                    <ArrowRight className="w-5 h-5 mr-2" />
+                    Proceed to Payment - ₹{selectedCourse.price}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </section>
 
       {/* Payment Section */}
-      {currentSection === "payment" && (
+      {currentSection === "payment" && selectedCourse && (
         <section id="payment" className="py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
           <div className="container mx-auto px-4">
             <div className="max-w-md mx-auto space-y-6">
               
-              {/* Razorpay Coming Soon Notice */}
-              <Card className="border-2 border-yellow-200 bg-yellow-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="text-yellow-600">
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-yellow-800">Razorpay Payment Gateway Coming Soon!</p>
-                      <p className="text-xs text-yellow-700">Online payment will be available within 1-2 days.</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* QR Code Payment Option */}
+              {/* Course & Payment Summary */}
               <Card className="border-0 shadow-2xl">
-                <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white text-center p-8">
-                  <CardTitle className="text-2xl font-bold leading-tight">Early Registration Payment</CardTitle>
-                  <CardDescription className="text-green-100 text-lg leading-relaxed">
-                    Pay via QR Code & WhatsApp
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center p-8">
+                  <CardTitle className="text-2xl font-bold leading-tight">Complete Your Payment</CardTitle>
+                  <CardDescription className="text-blue-100 text-lg leading-relaxed">
+                    Secure payment powered by Razorpay
                   </CardDescription>
                 </CardHeader>
 
                 <CardContent className="p-8 space-y-6">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-3 mb-4">
-                      <div className="text-2xl font-bold text-gray-400 line-through">₹499/-</div>
-                      <div className="text-4xl font-bold text-green-600">₹11/-</div>
+                  {/* Course Summary */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border-2 border-blue-200">
+                    <h3 className="font-bold text-lg text-blue-900 mb-4">{selectedCourse.name}</h3>
+                    <div className="space-y-3 text-left">
+                      <p className="flex justify-between">
+                        <strong>Name:</strong>
+                        <span>
+                          {formData.firstName} {formData.lastName}
+                        </span>
+                      </p>
+                      <p className="flex justify-between">
+                        <strong>Email:</strong>
+                        <span>{formData.email}</span>
+                      </p>
+                      <p className="flex justify-between">
+                        <strong>Standard:</strong>
+                        <span>{formData.standard}</span>
+                      </p>
                     </div>
-                    <p className="text-gray-600 mb-6 leading-relaxed">Beginner Workshop</p>
-                  </div>
-
-                  <div className="space-y-3 text-left bg-green-50 p-6 rounded-lg">
-                    <p className="flex justify-between">
-                      <strong>Name:</strong>
-                      <span>
-                        {formData.firstName} {formData.lastName}
-                      </span>
-                    </p>
-                    <p className="flex justify-between">
-                      <strong>Email:</strong>
-                      <span>{formData.email}</span>
-                    </p>
-                    <p className="flex justify-between">
-                      <strong>Standard:</strong>
-                      <span>{formData.standard}</span>
-                    </p>
-                  </div>
-
-                  {/* QR Code Section */}
-                  <div className="bg-white p-6 rounded-lg border-2 border-green-200 text-center">
-                    <h3 className="font-bold text-lg mb-4 text-green-800">Scan QR Code to Pay ₹11</h3>
-                    <div className="flex justify-center mb-4">
-                      <div className="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                        <img 
-                          src="/payment-qr2.jpeg" 
-                          alt="Payment QR Code" 
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            target.nextElementSibling!.classList.remove('hidden');
-                          }}
-                        />
-                        <div className="hidden text-gray-500 text-center p-4">
-                          <p className="text-sm font-medium">QR Code</p>
-                          <p className="text-xs">Image will be added soon</p>
+                    
+                    {/* Special notice for Strategic 1-1 Call */}
+                    {selectedCourse.id === 'strategic_call' && (
+                      <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          <h4 className="font-semibold text-purple-800">Session Scheduling</h4>
                         </div>
+                        <p className="text-purple-700 text-sm">
+                          After payment, our team will reach out to you within <strong>2 working days</strong> to schedule your personalized 1-on-1 session at your convenience.
+                        </p>
                       </div>
-                    </div>
-                    <div className="text-center mb-4">
-                      <p className="text-sm text-gray-600 mb-2">
-                        Scan this QR code with any UPI app to pay ₹11
-                      </p>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 inline-block">
-                        <p className="text-xs text-blue-700 font-medium">UPI ID:</p>
-                        <p className="text-sm font-mono font-bold text-blue-900 select-all">8699397771@ptsbi</p>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Or copy this UPI ID to pay manually
-                      </p>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Instructions */}
-                  <div className="bg-blue-50 p-6 rounded-lg space-y-4">
-                    <h3 className="font-bold text-lg text-blue-800">Payment Instructions:</h3>
-                    <ol className="space-y-2 text-sm text-blue-700">
+                  {/* Pricing */}
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      {selectedCourse.originalPrice !== selectedCourse.price && (
+                        <div className="text-2xl font-bold text-gray-400 line-through">₹{selectedCourse.originalPrice}/-</div>
+                      )}
+                      <div className="text-4xl font-bold text-green-600">₹{selectedCourse.price}/-</div>
+                      {selectedCourse.originalPrice !== selectedCourse.price && (
+                        <Badge className="bg-green-100 text-green-800 font-bold">
+                          {Math.round((1 - selectedCourse.price / selectedCourse.originalPrice) * 100)}% OFF!
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-gray-600 mb-6 leading-relaxed">{selectedCourse.name}</p>
+                  </div>
+
+                  {/* Payment Instructions */}
+                  <div className="bg-green-50 p-6 rounded-lg space-y-4">
+                    <h3 className="font-bold text-lg text-green-800">Payment Process:</h3>
+                    <ol className="space-y-2 text-sm text-green-700">
                       <li className="flex items-start gap-2">
-                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span>
-                        <span>Scan the QR code above and pay <strong>₹11</strong> using any UPI app</span>
+                        <span className="bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</span>
+                        <span>Click "Pay Now" to open secure Razorpay payment gateway</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span>
-                        <span>Take a screenshot of the successful payment</span>
+                        <span className="bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</span>
+                        <span>Choose from UPI, Cards, Net Banking, or Wallet</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span>
-                        <span>Upload the payment screenshot below to confirm your registration</span>
+                        <span className="bg-green-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</span>
+                        <span>Complete payment securely and get instant confirmation</span>
                       </li>
                     </ol>
                   </div>
 
-                  {/* File Upload Section */}
-                  <div className="bg-orange-50 p-6 rounded-lg border-2 border-orange-200 space-y-4">
-                    <h3 className="font-bold text-lg text-orange-800">Upload Payment Screenshot</h3>
-                    
-                    <div className="border-2 border-dashed border-orange-300 rounded-lg p-6 text-center">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                        id="screenshot-upload"
-                        disabled={isUploading}
-                      />
-                      <label 
-                        htmlFor="screenshot-upload" 
-                        className={`cursor-pointer flex flex-col items-center space-y-3 ${isUploading ? 'cursor-not-allowed opacity-50' : ''}`}
-                      >
-                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                          <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-orange-800 font-semibold">
-                            {selectedFile ? selectedFile.name : "Click to upload payment screenshot"}
-                          </p>
-                          <p className="text-orange-600 text-sm">
-                            PNG, JPG, JPEG up to 10MB
-                          </p>
-                        </div>
-                      </label>
-                    </div>
-
-                    {selectedFile && (
-                      <div className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
-                            <p className="text-xs text-gray-500">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setSelectedFile(null)}
-                          className="text-red-500 hover:text-red-700"
-                          disabled={isUploading}
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-
-                    {isUploading && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm text-orange-700">
-                          <span>Uploading...</span>
-                          <span>{uploadProgress}%</span>
-                        </div>
-                        <div className="w-full bg-orange-200 rounded-full h-2">
-                          <div 
-                            className="bg-orange-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${uploadProgress}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Button */}
+                  {/* Payment Button */}
                   <Button
-                    onClick={handleScreenshotUpload}
-                    disabled={!selectedFile || isUploading}
+                    onClick={handlePayment}
+                    disabled={isLoading}
                     className={`w-full text-lg py-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 ${
-                      !selectedFile || isUploading
+                      isLoading
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
                     }`}
                     size="lg"
                   >
-                    {isUploading ? (
+                    {isLoading ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                        Uploading Screenshot...
+                        Processing Payment...
                       </>
                     ) : (
                       <>
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
-                        Confirm Payment & Complete Registration
+                        Pay ₹{selectedCourse.price} - Razorpay
+                        <ExternalLink className="w-5 h-5 ml-2" />
                       </>
                     )}
                   </Button>
 
-                  <p className="text-xs text-gray-500 text-center leading-relaxed">
-                    Your payment will be automatically confirmed once the screenshot is uploaded successfully.
-                  </p>
-                </CardContent>
-              </Card>
+                  {/* Security Notice */}
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                      </svg>
+                      <h4 className="font-semibold text-blue-800">Secure Payment</h4>
+                    </div>
+                    <p className="text-blue-700 text-sm">
+                      Your payment is secured by Razorpay with industry-standard encryption. We don't store your payment information.
+                    </p>
+                  </div>
 
-              {/* Razorpay Option (Disabled/Coming Soon) */}
-              <Card className="border-2 border-gray-200 bg-gray-50 opacity-60">
-                <CardHeader className="bg-gradient-to-r from-gray-400 to-gray-500 text-white text-center p-6">
-                  <CardTitle className="text-xl font-bold leading-tight">Online Payment</CardTitle>
-                  <CardDescription className="text-gray-200 text-base leading-relaxed">
-                    Coming Soon - Razorpay Integration
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="p-6 space-y-4">
-                  <Button
-                    disabled={true}
-                    className="w-full bg-gray-400 cursor-not-allowed text-lg py-6"
-                    size="lg"
-                  >
-                    <ExternalLink className="w-5 h-5 mr-2" />
-                    Pay ₹11 with Razorpay (Coming Soon)
-                  </Button>
-
-                  <p className="text-xs text-gray-500 text-center leading-relaxed">
-                    Secured by Razorpay. Will be available within 1-2 days.
-                  </p>
+                  {/* Back to Registration Button */}
+                  <div className="text-center">
+                    <Button
+                      onClick={() => {
+                        setCurrentSection("registration")
+                        scrollToSection("registration")
+                      }}
+                      variant="outline"
+                      className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                    >
+                      ← Back to Registration
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1508,20 +1539,46 @@ const handleBrochureDownload = () => {
                 <CardContent className="p-8 space-y-6">
                   <div className="bg-green-50 p-6 rounded-lg">
                     <p className="text-gray-700 leading-relaxed">
-                      🎉 Congratulations! You've successfully registered for the MUNIQ Beginner Workshop. You will
-                      receive a confirmation email shortly with workshop details and joining instructions.
+                      🎉 Congratulations! You've successfully enrolled in <strong>{selectedCourse?.name || "the selected course"}</strong>. You will
+                      receive a confirmation email shortly with course details and access instructions.
                     </p>
                   </div>
 
+                  {selectedCourse && (
+                    <div className="space-y-3 text-sm text-gray-600 bg-blue-50 p-4 rounded-lg">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Course:</span>
+                        <span>{selectedCourse.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Amount Paid:</span>
+                        <span className="font-bold text-green-600">₹{selectedCourse.price}</span>
+                      </div>
+                      {selectedCourse.originalPrice !== selectedCourse.price && (
+                        <div className="flex justify-between">
+                          <span className="font-medium">You Saved:</span>
+                          <span className="font-bold text-green-600">₹{selectedCourse.originalPrice - selectedCourse.price}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-3 text-sm text-gray-600">
-                    <p>📅 Workshop: 20th July</p>
-                    <p>🏆 Certificate will be provided</p>
+                    <p>📧 Confirmation email will arrive within 5 minutes</p>
+                    <p>🏆 {selectedCourse?.id === 'strategic_call' ? 'Session details will be shared separately' : 'Certificate will be provided upon completion'}</p>
+                    {selectedCourse?.id === 'strategic_call' && (
+                      <p className="font-semibold text-purple-600">📞 Our team will reach out to you within 2 working days to schedule your personalized session</p>
+                    )}
+                    <p>📞 Contact support if you need any assistance</p>
                   </div>
 
                   <Button
                     onClick={() => {
                       setCurrentSection("home")
                       scrollToSection("home")
+                      // Clear course selection
+                      localStorage.removeItem('selected_course')
+                      setSelectedCourse(null)
                     }}
                     className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   >

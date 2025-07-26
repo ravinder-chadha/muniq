@@ -11,6 +11,9 @@ export interface Registration {
   standard: string
   institution?: string
   mun_experience: string
+  course_id?: string
+  course_name?: string
+  course_price?: number
   workshop_slot?: '2-4pm' | '4-6pm'
   created_at?: string
   updated_at?: string
@@ -24,6 +27,9 @@ export interface Payment {
   signature?: string
   amount: number
   currency: string
+  course_id?: string
+  course_name?: string
+  course_details?: any
   status: 'pending' | 'completed' | 'failed'
   payment_screenshot_url?: string
   payment_method?: 'razorpay' | 'qr_code' | 'manual'

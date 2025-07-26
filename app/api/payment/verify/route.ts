@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import Razorpay from "razorpay"
 import crypto from "crypto"
 import { db, type Payment } from "@/lib/supabase"
-
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-})
 
 export async function POST(request: NextRequest) {
   try {
     const { 
       razorpay_order_id, 
       razorpay_payment_id, 
-      razorpay_signature,
-      registrationId 
+      razorpay_signature, 
+      registrationId,
+      courseDetails 
     } = await request.json()
 
     // Validate required fields
@@ -29,62 +23,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify payment signature
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+    // Verify signature with Razorpay
+    const key_secret = process.env.RAZORPAY_KEY_SECRET!
+    const generated_signature = crypto
+      .createHmac("sha256", key_secret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex")
 
-    if (expectedSignature !== razorpay_signature) {
-      console.error("Payment signature verification failed")
+    if (generated_signature !== razorpay_signature) {
       return NextResponse.json(
         { 
           success: false, 
-          message: "Payment verification failed. Invalid signature." 
+          message: "Payment signature verification failed" 
         }, 
         { status: 400 }
       )
     }
 
-    // Fetch payment details from Razorpay to get amount
-    let paymentDetails
-    try {
-      paymentDetails = await razorpay.payments.fetch(razorpay_payment_id)
-    } catch (error) {
-      console.error("Error fetching payment details:", error)
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: "Failed to fetch payment details from Razorpay" 
-        }, 
-        { status: 500 }
-      )
-    }
-
-    // Check if registration exists
-    try {
-      const registration = await db.getRegistration(registrationId)
-      if (!registration) {
-        return NextResponse.json(
-          { 
-            success: false, 
-            message: "Registration not found" 
-          }, 
-          { status: 404 }
-        )
-      }
-    } catch (error) {
-      console.error("Error checking registration:", error)
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: "Invalid registration ID" 
-        }, 
-        { status: 400 }
-      )
-    }
-
-    // Check if payment already exists for this registration
+    // Check if payment already exists
     try {
       const existingPayment = await db.getPaymentByRegistration(registrationId)
       if (existingPayment) {
@@ -97,77 +53,48 @@ export async function POST(request: NextRequest) {
         )
       }
     } catch (error) {
-      // If error is not "not found", then it's a real error
-      console.error("Error checking existing payment:", error)
+      // Continue if payment doesn't exist
     }
 
-    // Save verified payment to database
+    // Save payment to database with course information
     const paymentData: Payment = {
       registration_id: registrationId,
       payment_id: razorpay_payment_id,
       order_id: razorpay_order_id,
       signature: razorpay_signature,
-      amount: Number(paymentDetails.amount) / 100, // Convert from paise to rupees
-      currency: paymentDetails.currency,
-      status: 'completed'
+      amount: courseDetails?.price || 0,
+      currency: 'INR',
+      course_id: courseDetails?.id,
+      course_name: courseDetails?.name,
+      course_details: courseDetails,
+      status: 'completed',
+      payment_method: 'razorpay'
     }
 
     const payment = await db.createPayment(paymentData)
 
-    console.log("Payment verified and saved successfully:", payment.id)
+    console.log("Payment verified and saved:", payment.id)
 
     return NextResponse.json({
       success: true,
-      message: "Payment verified and saved successfully",
+      message: "Payment verified successfully",
       data: {
         id: payment.id,
-        registrationId: payment.registration_id,
         paymentId: payment.payment_id,
         orderId: payment.order_id,
         amount: payment.amount,
-        status: payment.status,
-        verified: true
+        course: courseDetails,
+        status: payment.status
       }
     })
 
   } catch (error) {
     console.error("Error verifying payment:", error)
     
-    // Handle specific database errors
-    if (error && typeof error === 'object' && 'code' in error) {
-      switch (error.code) {
-        case '23505': // Unique constraint violation
-          return NextResponse.json(
-            { 
-              success: false, 
-              message: "Payment already exists for this registration" 
-            }, 
-            { status: 409 }
-          )
-        case '23503': // Foreign key constraint violation
-          return NextResponse.json(
-            { 
-              success: false, 
-              message: "Invalid registration ID" 
-            }, 
-            { status: 400 }
-          )
-        default:
-          return NextResponse.json(
-            { 
-              success: false, 
-              message: "Database error occurred. Please try again." 
-            }, 
-            { status: 500 }
-          )
-      }
-    }
-
     return NextResponse.json(
       { 
         success: false, 
-        message: "Payment verification failed. Please contact support.",
-        error: process.env.NODE_ENV === 'development' ? error : undefined
+        message: "Payment verification failed. Please contact support." 
       }, 
       { status: 500 }
     )

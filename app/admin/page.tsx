@@ -574,6 +574,12 @@ export default function AdminPage() {
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
+                    <span className="text-purple-700">Manual Payments:</span>
+                    <Badge className="bg-purple-100 text-purple-800">
+                      {payments.filter(p => p.payment_method === 'manual' && p.status === 'completed').length}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
                     <span className="text-green-700">Total Revenue:</span>
                     <Badge className="bg-green-100 text-green-800">
                       ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
@@ -621,11 +627,14 @@ export default function AdminPage() {
                                     ? 'bg-orange-100 text-orange-800 border-orange-300' 
                                     : payment.payment_method === 'razorpay'
                                     ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : payment.payment_method === 'manual'
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300'
                                     : 'bg-gray-100 text-gray-800 border-gray-300'
                                 }`}
                               >
                                 {payment.payment_method === 'qr_code' ? 'QR Payment' : 
-                                 payment.payment_method === 'razorpay' ? 'Razorpay' : 'Manual'}
+                                 payment.payment_method === 'razorpay' ? 'Razorpay' : 
+                                 payment.payment_method === 'manual' ? 'Manual' : 'Other'}
                               </Badge>
                             )}
                           </div>
@@ -636,7 +645,8 @@ export default function AdminPage() {
                             {payment.order_id && <div>Order ID: {payment.order_id}</div>}
                             {payment.payment_method && (
                               <div>Method: {payment.payment_method === 'qr_code' ? 'QR Code Payment' : 
-                                         payment.payment_method === 'razorpay' ? 'Razorpay Gateway' : 'Manual Entry'}</div>
+                                         payment.payment_method === 'razorpay' ? 'Razorpay Gateway' : 
+                                         payment.payment_method === 'manual' ? 'Manual Entry (Admin)' : 'Other'}</div>
                             )}
                           </div>
                         </div>
@@ -694,6 +704,12 @@ export default function AdminPage() {
                           {payment.payment_method === 'qr_code' && !payment.payment_screenshot_url && (
                             <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-center">
                               <p className="text-xs text-yellow-700">QR Payment - No screenshot uploaded</p>
+                            </div>
+                          )}
+                          
+                          {payment.payment_method === 'manual' && (
+                            <div className="mt-3 p-2 bg-purple-50 border border-purple-200 rounded text-center">
+                              <p className="text-xs text-purple-700">Manual Payment - No screenshot required</p>
                             </div>
                           )}
                         </div>
