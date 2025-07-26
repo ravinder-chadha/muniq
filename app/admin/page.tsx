@@ -351,6 +351,36 @@ export default function AdminPage() {
     setDateFilter('all')
   }
 
+  // Get the correct course information (prioritize payment data over registration data)
+  const getCorrectCourseInfo = (registrationId: string, defaultCourse: any) => {
+    // First, check if there's a payment for this registration with course info
+    const payment = payments.find(p => p.registration_id === registrationId)
+    if (payment?.course_name && payment?.course_id) {
+      return {
+        course_id: payment.course_id,
+        course_name: payment.course_name,
+        course_price: payment.amount || defaultCourse.price
+      }
+    }
+    
+    // Then check the registration itself
+    const registration = registrations.find(r => r.id === registrationId)
+    if (registration?.course_name && registration?.course_id) {
+      return {
+        course_id: registration.course_id,
+        course_name: registration.course_name,
+        course_price: registration.course_price || defaultCourse.price
+      }
+    }
+    
+    // Fall back to default course
+    return {
+      course_id: defaultCourse.id,
+      course_name: defaultCourse.name,
+      course_price: defaultCourse.price
+    }
+  }
+
   // Get filtered data
   const filteredRegistrations = filterRegistrations(registrations)
   const filteredPayments = filterPayments(payments)
@@ -743,7 +773,7 @@ export default function AdminPage() {
                                   variant="outline" 
                                   className={`text-xs bg-${course.color}-50 text-${course.color}-700 border-${course.color}-300`}
                                 >
-                                  {registration.course_name || course.name}
+                                  {getCorrectCourseInfo(registration.id, course).course_name}
                                 </Badge>
                               </div>
                               <div className="space-y-1 text-sm text-gray-600">
@@ -771,12 +801,15 @@ export default function AdminPage() {
                                   <Trophy className="w-4 h-4 mr-2" />
                                   MUN Experience: {registration.mun_experience}
                                 </div>
-                                {registration.course_price && (
-                                  <div className="flex items-center">
-                                    <CreditCard className="w-4 h-4 mr-2" />
-                                    Course Price: ₹{registration.course_price}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const courseInfo = getCorrectCourseInfo(registration.id, course)
+                                  return courseInfo.course_price && (
+                                    <div className="flex items-center">
+                                      <CreditCard className="w-4 h-4 mr-2" />
+                                      Course Price: ₹{courseInfo.course_price}
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             </div>
                             <div className="text-right">

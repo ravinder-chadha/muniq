@@ -31,6 +31,9 @@ export async function POST(request: NextRequest) {
       standard: data.standard,
       institution: data.institution || null,
       mun_experience: data.munExperience,
+      course_id: data.course_id || null,
+      course_name: data.course_name || null,
+      course_price: data.course_price || null,
       workshop_slot: '4-6pm' // All new registrations go to the new slot
     }
 
