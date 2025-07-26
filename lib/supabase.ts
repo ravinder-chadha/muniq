@@ -86,10 +86,27 @@ export const db = {
       .from('registrations')
       .select('*')
       .eq('email', email)
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('Error fetching registrations by email:', error)
+      throw error
+    }
+    
+    return data // Returns array of registrations (can be empty)
+  },
+
+  async getLatestRegistrationByEmail(email: string) {
+    const { data, error } = await supabaseAdmin
+      .from('registrations')
+      .select('*')
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
     
     if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
-      console.error('Error fetching registration by email:', error)
+      console.error('Error fetching latest registration by email:', error)
       throw error
     }
     
@@ -159,7 +176,7 @@ export const db = {
   },
 
   // Combined operations
-  async getRegistrationWithPayment(email: string) {
+  async getRegistrationsWithPayments(email: string) {
     const { data, error } = await supabaseAdmin
       .from('registrations')
       .select(`
@@ -167,10 +184,30 @@ export const db = {
         payments (*)
       `)
       .eq('email', email)
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('Error fetching registrations with payments:', error)
+      throw error
+    }
+    
+    return data // Returns array of registrations with their payments
+  },
+
+  async getLatestRegistrationWithPayment(email: string) {
+    const { data, error } = await supabaseAdmin
+      .from('registrations')
+      .select(`
+        *,
+        payments (*)
+      `)
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
     
     if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching registration with payment:', error)
+      console.error('Error fetching latest registration with payment:', error)
       throw error
     }
     

@@ -31,23 +31,27 @@ const testRegistration = async () => {
       console.log("✅ Registration successful!");
       console.log("Response:", result);
       
-      // Test duplicate email
-      console.log("\n🧪 Testing duplicate email...");
+      // Test multiple registrations with same email (now allowed)
+      console.log("\n🧪 Testing multiple registrations with same email...");
       const duplicateResponse = await fetch('http://localhost:3000/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(testData) // Same data
+        body: JSON.stringify({
+          ...testData,
+          firstName: "Jane", // Different name, same email
+          lastName: "Smith"
+        })
       });
 
       const duplicateResult = await duplicateResponse.json();
       
-      if (duplicateResponse.status === 409) {
-        console.log("✅ Duplicate email handling working correctly!");
+      if (duplicateResponse.ok) {
+        console.log("✅ Multiple registrations with same email working correctly!");
         console.log("Response:", duplicateResult);
       } else {
-        console.log("❌ Duplicate email should return 409 conflict");
+        console.log("❌ Multiple registrations with same email should be allowed");
         console.log("Response:", duplicateResult);
       }
       

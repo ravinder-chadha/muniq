@@ -19,22 +19,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email already exists
-    try {
-      const existingRegistration = await db.getRegistrationByEmail(data.email)
-      if (existingRegistration) {
-        return NextResponse.json(
-          { 
-            success: false, 
-            message: "Email already registered. Please use a different email address." 
-          }, 
-          { status: 409 }
-        )
-      }
-    } catch (error) {
-      // If error is not "not found", then it's a real error
-      console.error("Error checking existing registration:", error)
-    }
+    // Note: Multiple registrations from same email are now allowed
 
     // Transform form data to match database schema
     const registrationData: Registration = {
@@ -70,14 +55,6 @@ export async function POST(request: NextRequest) {
     // Handle specific database errors
     if (error && typeof error === 'object' && 'code' in error) {
       switch (error.code) {
-        case '23505': // Unique constraint violation
-          return NextResponse.json(
-            { 
-              success: false, 
-              message: "Email already registered. Please use a different email address." 
-            }, 
-            { status: 409 }
-          )
         case '23502': // Not null constraint violation
           return NextResponse.json(
             { 

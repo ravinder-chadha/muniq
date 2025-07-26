@@ -9,6 +9,9 @@ import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { checkAdminAuth, logout } from "@/lib/auth"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import {
   Database,
   Users,
@@ -26,6 +29,9 @@ import {
   Trophy,
   LogOut,
   Shield,
+  Search,
+  Filter,
+  X,
 } from "lucide-react"
 
 interface Registration {
@@ -78,6 +84,16 @@ export default function AdminPage() {
   const [dbStatus, setDbStatus] = useState<'unknown' | 'connected' | 'error'>('unknown')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
+  
+  // Filter states
+  const [searchTerm, setSearchTerm] = useState('')
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all')
+  const [courseFilter, setCourseFilter] = useState('all')
+  const [workshopSlotFilter, setWorkshopSlotFilter] = useState('all')
+  const [munExperienceFilter, setMunExperienceFilter] = useState('all')
+  const [standardFilter, setStandardFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState('all')
+  
   const { toast } = useToast()
   const router = useRouter()
 
@@ -240,6 +256,105 @@ export default function AdminPage() {
     return { status: payment.status, payment }
   }
 
+  // Filter functions
+  const filterRegistrations = (regs: Registration[]) => {
+    return regs.filter(registration => {
+      // Search filter
+      const matchesSearch = searchTerm === '' || 
+        `${registration.first_name} ${registration.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        registration.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        registration.contact?.includes(searchTerm) ||
+        registration.institution?.toLowerCase().includes(searchTerm.toLowerCase())
+
+      // Payment status filter
+      const paymentStatus = getPaymentStatusForRegistration(registration.id).status
+      const matchesPaymentStatus = paymentStatusFilter === 'all' || paymentStatus === paymentStatusFilter
+
+      // Course filter
+      const matchesCourse = courseFilter === 'all' || 
+        registration.course_id === courseFilter ||
+        (courseFilter === 'workshop' && (!registration.course_id || registration.course_id === 'workshop'))
+
+      // Workshop slot filter (only for workshop)
+      const matchesSlot = workshopSlotFilter === 'all' || registration.workshop_slot === workshopSlotFilter
+
+      // MUN experience filter
+      const matchesExperience = munExperienceFilter === 'all' || registration.mun_experience === munExperienceFilter
+
+      // Standard filter
+      const matchesStandard = standardFilter === 'all' || registration.standard === standardFilter
+
+      // Date filter
+      const registrationDate = new Date(registration.created_at)
+      const now = new Date()
+      let matchesDate = true
+      
+      if (dateFilter === 'today') {
+        matchesDate = registrationDate.toDateString() === now.toDateString()
+      } else if (dateFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        matchesDate = registrationDate >= weekAgo
+      } else if (dateFilter === 'month') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        matchesDate = registrationDate >= monthAgo
+      }
+
+      return matchesSearch && matchesPaymentStatus && matchesCourse && 
+             matchesSlot && matchesExperience && matchesStandard && matchesDate
+    })
+  }
+
+  const filterPayments = (pays: Payment[]) => {
+    return pays.filter(payment => {
+      // Search filter
+      const matchesSearch = searchTerm === '' || 
+        `${payment.registrations?.first_name} ${payment.registrations?.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.registrations?.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.payment_id.includes(searchTerm) ||
+        payment.order_id?.includes(searchTerm)
+
+      // Payment status filter
+      const matchesPaymentStatus = paymentStatusFilter === 'all' || payment.status === paymentStatusFilter
+
+      // Course filter
+      const matchesCourse = courseFilter === 'all' || 
+        payment.course_id === courseFilter ||
+        (courseFilter === 'workshop' && (!payment.course_id || payment.course_id === 'workshop'))
+
+      // Date filter
+      const paymentDate = new Date(payment.created_at)
+      const now = new Date()
+      let matchesDate = true
+      
+      if (dateFilter === 'today') {
+        matchesDate = paymentDate.toDateString() === now.toDateString()
+      } else if (dateFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        matchesDate = paymentDate >= weekAgo
+      } else if (dateFilter === 'month') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        matchesDate = paymentDate >= monthAgo
+      }
+
+      return matchesSearch && matchesPaymentStatus && matchesCourse && matchesDate
+    })
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchTerm('')
+    setPaymentStatusFilter('all')
+    setCourseFilter('all')
+    setWorkshopSlotFilter('all')
+    setMunExperienceFilter('all')
+    setStandardFilter('all')
+    setDateFilter('all')
+  }
+
+  // Get filtered data
+  const filteredRegistrations = filterRegistrations(registrations)
+  const filteredPayments = filterPayments(payments)
+
   const getPaymentStatusBadge = (registrationId: string) => {
     const { status, payment } = getPaymentStatusForRegistration(registrationId)
     
@@ -337,7 +452,7 @@ export default function AdminPage() {
                   <Users className="w-5 h-5 mr-2" />
                   Registrations
                 </CardTitle>
-                <Badge variant="outline">{registrations.length}</Badge>
+                <Badge variant="outline">{filteredRegistrations.length}</Badge>
               </div>
             </CardHeader>
             <CardContent>
@@ -355,7 +470,7 @@ export default function AdminPage() {
                   <CreditCard className="w-5 h-5 mr-2" />
                   Payments
                 </CardTitle>
-                <Badge variant="outline">{payments.length}</Badge>
+                <Badge variant="outline">{filteredPayments.length}</Badge>
               </div>
             </CardHeader>
             <CardContent>
@@ -375,6 +490,154 @@ export default function AdminPage() {
           </Button>
         </div>
 
+        {/* Filter Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Filter className="w-5 h-5 mr-2" />
+              Filters & Search
+              <Badge className="ml-3 bg-blue-100 text-blue-800">
+                {filteredRegistrations.length} / {registrations.length} registrations
+              </Badge>
+              <Badge className="ml-2 bg-green-100 text-green-800">
+                {filteredPayments.length} / {payments.length} payments
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Filter and search through registrations and payments
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Search Bar */}
+            <div className="mb-4">
+              <Label htmlFor="search" className="text-sm font-medium mb-2 block">
+                Search by name, email, contact, or institution
+              </Label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Input
+                  id="search"
+                  placeholder="Search registrations..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {/* Filter Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+              {/* Payment Status Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Payment Status</Label>
+                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="completed">Paid</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Course Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Course</Label>
+                <Select value={courseFilter} onValueChange={setCourseFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Courses</SelectItem>
+                    <SelectItem value="workshop">Workshop</SelectItem>
+                    <SelectItem value="mun_course">MUN Course</SelectItem>
+                    <SelectItem value="ip_course">IP Course</SelectItem>
+                    <SelectItem value="strategic_call">Strategic Call</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Workshop Slot Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Workshop Slot</Label>
+                <Select value={workshopSlotFilter} onValueChange={setWorkshopSlotFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Slots</SelectItem>
+                    <SelectItem value="2-4pm">2-4 PM</SelectItem>
+                    <SelectItem value="4-6pm">4-6 PM</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* MUN Experience Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Experience</Label>
+                <Select value={munExperienceFilter} onValueChange={setMunExperienceFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Levels</SelectItem>
+                    <SelectItem value="beginner">Beginner</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Standard Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Standard</Label>
+                <Select value={standardFilter} onValueChange={setStandardFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Standards</SelectItem>
+                    <SelectItem value="9th">9th</SelectItem>
+                    <SelectItem value="10th">10th</SelectItem>
+                    <SelectItem value="11th">11th</SelectItem>
+                    <SelectItem value="12th">12th</SelectItem>
+                    <SelectItem value="undergraduate">Undergraduate</SelectItem>
+                    <SelectItem value="postgraduate">Postgraduate</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date Filter */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Date Range</Label>
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Clear Filters Button */}
+              <div className="flex items-end">
+                <Button variant="outline" onClick={clearFilters} className="w-full">
+                  <X className="w-4 h-4 mr-2" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Registrations Section - Grouped by Courses */}
         {[
           { id: 'mun_course', name: 'MUN Mastery Course', color: 'blue', price: 999 },
@@ -382,7 +645,7 @@ export default function AdminPage() {
           { id: 'strategic_call', name: 'Strategic 1-1 Call', color: 'purple', price: 349 },
           { id: 'workshop', name: 'Beginner Workshop', color: 'orange', price: 499 }
         ].map(course => {
-          const courseRegistrations = registrations.filter(r => 
+          const courseRegistrations = filteredRegistrations.filter(r => 
             r.course_id === course.id || 
             (course.id === 'workshop' && (!r.course_id || r.course_id === 'workshop'))
           )
@@ -442,10 +705,26 @@ export default function AdminPage() {
                 {courseRegistrations.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <div className="mb-2">
-                      📚 No registrations found for {course.name} yet.
+                      📚 {(() => {
+                        const allCourseRegs = registrations.filter(r => 
+                          r.course_id === course.id || 
+                          (course.id === 'workshop' && (!r.course_id || r.course_id === 'workshop'))
+                        );
+                        return allCourseRegs.length === 0 
+                          ? `No registrations found for ${course.name} yet.`
+                          : `No registrations match the current filters for ${course.name}.`;
+                      })()}
                     </div>
                     <div className="text-sm">
-                      Try registering for this course to see it appear here!
+                      {(() => {
+                        const allCourseRegs = registrations.filter(r => 
+                          r.course_id === course.id || 
+                          (course.id === 'workshop' && (!r.course_id || r.course_id === 'workshop'))
+                        );
+                        return allCourseRegs.length === 0 
+                          ? "Try registering for this course to see it appear here!"
+                          : "Try adjusting your search criteria or clear filters to see more results.";
+                      })()}
                     </div>
                   </div>
                 ) : (
@@ -603,20 +882,23 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <CreditCard className="w-5 h-5 mr-2" />
-              Payments ({payments.length})
+              Payments ({filteredPayments.length})
             </CardTitle>
             <CardDescription>
               All payment transactions with course details
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {payments.length === 0 ? (
+            {filteredPayments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                No payments found. Complete a registration with payment to see data here!
+                {payments.length === 0 ? 
+                  "No payments found. Complete a registration with payment to see data here!" :
+                  "No payments match the current filters. Try adjusting your search criteria."
+                }
               </div>
             ) : (
               <div className="space-y-4">
-                {payments.map((payment) => (
+                {filteredPayments.map((payment) => (
                   <Card key={payment.id} className="border-l-4 border-l-green-500">
                     <CardContent className="p-4">
                       <div className="grid md:grid-cols-3 gap-4">
