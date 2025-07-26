@@ -38,6 +38,9 @@ interface Registration {
   standard: string
   institution?: string
   mun_experience: string
+  course_id?: string
+  course_name?: string
+  course_price?: number
   workshop_slot?: '2-4pm' | '4-6pm'
   created_at: string
   updated_at: string
@@ -51,6 +54,9 @@ interface Payment {
   signature?: string
   amount: number
   currency: string
+  course_id?: string
+  course_name?: string
+  course_details?: any
   status: string
   payment_screenshot_url?: string
   payment_method?: 'razorpay' | 'qr_code' | 'manual'
@@ -60,6 +66,8 @@ interface Payment {
     first_name: string
     last_name: string
     email: string
+    course_name?: string
+    course_id?: string
   }
 }
 
@@ -367,99 +375,83 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Registrations Section - Grouped by Slots */}
-        {['2-4pm', '4-6pm'].map(slot => {
-          // Better slot filtering logic
-          const slotRegistrations = registrations.filter(r => {
-            if (slot === '2-4pm') {
-              // For 2-4pm slot: include registrations with '2-4pm' or null/undefined slot
-              return r.workshop_slot === '2-4pm' || !r.workshop_slot
-            } else {
-              // For 4-6pm slot: only include exact matches
-              return r.workshop_slot === '4-6pm'
-            }
-          })
+        {/* Registrations Section - Grouped by Courses */}
+        {[
+          { id: 'mun_course', name: 'MUN Mastery Course', color: 'blue', price: 999 },
+          { id: 'ip_course', name: 'IP Mastery Course', color: 'green', price: 699 },
+          { id: 'strategic_call', name: 'Strategic 1-1 Call', color: 'purple', price: 349 },
+          { id: 'workshop', name: 'Beginner Workshop', color: 'orange', price: 499 }
+        ].map(course => {
+          const courseRegistrations = registrations.filter(r => 
+            r.course_id === course.id || 
+            (course.id === 'workshop' && (!r.course_id || r.course_id === 'workshop'))
+          )
           
-          const slotPaidCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'completed').length
-          const slotPendingCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'pending').length
-          const slotFailedCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'failed').length
-          const slotUnpaidCount = slotRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length
-          const slotRevenue = slotRegistrations.reduce((sum, r) => {
+          const coursePaidCount = courseRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'completed').length
+          const coursePendingCount = courseRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'pending').length
+          const courseFailedCount = courseRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'failed').length
+          const courseUnpaidCount = courseRegistrations.filter(r => getPaymentStatusForRegistration(r.id).status === 'unpaid').length
+          const courseRevenue = courseRegistrations.reduce((sum, r) => {
             const payment = payments.find(p => p.registration_id === r.id && p.status === 'completed')
             return sum + (payment ? payment.amount : 0)
           }, 0)
           
-          // Always show both slots, even if empty
-          const shouldShow = true
-          
           return (
-            <Card key={slot} className={`${slot === '2-4pm' ? 'border-red-200' : 'border-green-200'}`}>
+            <Card key={course.id} className={`border-${course.color}-200`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center">
                       <Users className="w-5 h-5 mr-2" />
-                      {slot === '2-4pm' ? 'Slot 1: 2:00 PM - 4:00 PM' : 'Slot 2: 4:00 PM - 6:00 PM'} ({slotRegistrations.length})
+                      {course.name} ({courseRegistrations.length})
                       <Badge 
-                        className={`ml-3 ${slot === '2-4pm' 
-                          ? 'bg-red-100 text-red-800' 
-                          : 'bg-green-100 text-green-800'
-                        }`}
+                        className={`ml-3 bg-${course.color}-100 text-${course.color}-800`}
                       >
-                        {slot === '2-4pm' ? 'CLOSED' : 'AVAILABLE'}
+                        ₹{course.price}
                       </Badge>
                     </CardTitle>
                     <CardDescription>
-                      {slot === '2-4pm' 
-                        ? 'Previous registrations (slot full)' 
-                        : 'Current registrations (accepting new)'
-                      }
+                      Course registrations and payment status
                     </CardDescription>
                   </div>
                   <div className="flex gap-2 flex-wrap">
                     <Badge className="bg-green-100 text-green-800">
                       <CheckCircle className="w-3 h-3 mr-1" />
-                      Paid: {slotPaidCount}
+                      Paid: {coursePaidCount}
                     </Badge>
                     <Badge className="bg-yellow-100 text-yellow-800">
                       <Clock className="w-3 h-3 mr-1" />
-                      Pending: {slotPendingCount}
+                      Pending: {coursePendingCount}
                     </Badge>
                     <Badge className="bg-red-100 text-red-800">
                       <XCircle className="w-3 h-3 mr-1" />
-                      Failed: {slotFailedCount}
+                      Failed: {courseFailedCount}
                     </Badge>
                     <Badge className="bg-gray-100 text-gray-800">
                       <AlertCircle className="w-3 h-3 mr-1" />
-                      Unpaid: {slotUnpaidCount}
+                      Unpaid: {courseUnpaidCount}
                     </Badge>
                     <Badge className="bg-blue-100 text-blue-800">
                       <CreditCard className="w-3 h-3 mr-1" />
-                      Revenue: ₹{slotRevenue}
+                      Revenue: ₹{courseRevenue}
                     </Badge>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                {slotRegistrations.length === 0 ? (
+                {courseRegistrations.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <div className="mb-2">
-                      {slot === '2-4pm' 
-                        ? '📅 No registrations found for this slot yet.' 
-                        : '🆕 No new registrations for this slot yet.'
-                      }
+                      📚 No registrations found for {course.name} yet.
                     </div>
                     <div className="text-sm">
-                      {slot === '2-4pm' 
-                        ? 'This slot is closed for new registrations.' 
-                        : 'This slot is open for new registrations. Try testing the registration form!'
-                      }
+                      Try registering for this course to see it appear here!
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {slotRegistrations.map((registration) => (
-                      <Card key={registration.id} className={`border-l-4 ${slot === '2-4pm' ? 'border-l-red-500' : 'border-l-green-500'}`}>
+                    {courseRegistrations.map((registration) => (
+                      <Card key={registration.id} className={`border-l-4 border-l-${course.color}-500`}>
                         <CardContent className="p-4">
                           <div className="grid md:grid-cols-2 gap-4">
                             <div>
@@ -470,12 +462,9 @@ export default function AdminPage() {
                                 {getPaymentStatusBadge(registration.id)}
                                 <Badge 
                                   variant="outline" 
-                                  className={`text-xs ${slot === '2-4pm' 
-                                    ? 'bg-red-50 text-red-700 border-red-300' 
-                                    : 'bg-green-50 text-green-700 border-green-300'
-                                  }`}
+                                  className={`text-xs bg-${course.color}-50 text-${course.color}-700 border-${course.color}-300`}
                                 >
-                                  {slot === '2-4pm' ? '2-4 PM' : '4-6 PM'}
+                                  {registration.course_name || course.name}
                                 </Badge>
                               </div>
                               <div className="space-y-1 text-sm text-gray-600">
@@ -503,6 +492,12 @@ export default function AdminPage() {
                                   <Trophy className="w-4 h-4 mr-2" />
                                   MUN Experience: {registration.mun_experience}
                                 </div>
+                                {registration.course_price && (
+                                  <div className="flex items-center">
+                                    <CreditCard className="w-4 h-4 mr-2" />
+                                    Course Price: ₹{registration.course_price}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
@@ -535,42 +530,54 @@ export default function AdminPage() {
               Overall Statistics ({registrations.length} Total)
             </CardTitle>
             <CardDescription>
-              Combined statistics for all slots
+              Combined statistics for all courses
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <h4 className="font-semibold mb-3">Slot Breakdown</h4>
+                <h4 className="font-semibold mb-3">Course Breakdown</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-red-700">Slot 1 (2-4 PM):</span>
-                    <Badge className="bg-red-100 text-red-800">
-                      {registrations.filter(r => r.workshop_slot === '2-4pm' || !r.workshop_slot).length} registrations
+                    <span className="text-blue-700">MUN Mastery Course:</span>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      {registrations.filter(r => r.course_id === 'mun_course').length} registrations
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-green-700">Slot 2 (4-6 PM):</span>
+                    <span className="text-green-700">IP Mastery Course:</span>
                     <Badge className="bg-green-100 text-green-800">
-                      {registrations.filter(r => r.workshop_slot === '4-6pm').length} registrations
+                      {registrations.filter(r => r.course_id === 'ip_course').length} registrations
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-purple-700">Strategic 1-1 Call:</span>
+                    <Badge className="bg-purple-100 text-purple-800">
+                      {registrations.filter(r => r.course_id === 'strategic_call').length} registrations
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-orange-700">Beginner Workshop:</span>
+                    <Badge className="bg-orange-100 text-orange-800">
+                      {registrations.filter(r => r.course_id === 'workshop' || !r.course_id).length} registrations
                     </Badge>
                   </div>
                 </div>
               </div>
               
               <div>
-                <h4 className="font-semibold mb-3">Payment Methods</h4>
+                <h4 className="font-semibold mb-3">Payment & Revenue</h4>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-orange-700">QR Payments:</span>
-                    <Badge className="bg-orange-100 text-orange-800">
-                      {payments.filter(p => p.payment_method === 'qr_code' && p.status === 'completed').length}
-                    </Badge>
-                  </div>
                   <div className="flex justify-between items-center">
                     <span className="text-blue-700">Razorpay Payments:</span>
                     <Badge className="bg-blue-100 text-blue-800">
                       {payments.filter(p => p.payment_method === 'razorpay' && p.status === 'completed').length}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-orange-700">QR Payments:</span>
+                    <Badge className="bg-orange-100 text-orange-800">
+                      {payments.filter(p => p.payment_method === 'qr_code' && p.status === 'completed').length}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
@@ -580,8 +587,8 @@ export default function AdminPage() {
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-green-700">Total Revenue:</span>
-                    <Badge className="bg-green-100 text-green-800">
+                    <span className="text-green-700 font-bold">Total Revenue:</span>
+                    <Badge className="bg-green-100 text-green-800 font-bold">
                       ₹{payments.filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0)}
                     </Badge>
                   </div>
@@ -599,7 +606,7 @@ export default function AdminPage() {
               Payments ({payments.length})
             </CardTitle>
             <CardDescription>
-              All payment transactions
+              All payment transactions with course details
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -619,6 +626,14 @@ export default function AdminPage() {
                               {payment.registrations?.first_name} {payment.registrations?.last_name}
                             </h4>
                             {getStatusBadge(payment.status)}
+                            {payment.course_name && (
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs bg-indigo-100 text-indigo-800 border-indigo-300"
+                              >
+                                {payment.course_name}
+                              </Badge>
+                            )}
                             {payment.payment_method && (
                               <Badge 
                                 variant="outline" 
@@ -643,6 +658,8 @@ export default function AdminPage() {
                             <div>Amount: ₹{payment.amount} {payment.currency}</div>
                             <div>Payment ID: {payment.payment_id}</div>
                             {payment.order_id && <div>Order ID: {payment.order_id}</div>}
+                            {payment.course_name && <div>Course: {payment.course_name}</div>}
+                            {payment.course_id && <div>Course ID: {payment.course_id}</div>}
                             {payment.payment_method && (
                               <div>Method: {payment.payment_method === 'qr_code' ? 'QR Code Payment' : 
                                          payment.payment_method === 'razorpay' ? 'Razorpay Gateway' : 
@@ -661,6 +678,14 @@ export default function AdminPage() {
                           <Badge variant="outline" className="text-xs mb-3">
                             ID: {payment.id.slice(0, 8)}...
                           </Badge>
+                          
+                          {/* Course Details */}
+                          {payment.course_details && (
+                            <div className="mt-3 p-2 bg-indigo-50 border border-indigo-200 rounded text-center">
+                              <p className="text-xs text-indigo-700 font-semibold">Course Details:</p>
+                              <p className="text-xs text-indigo-600">{JSON.stringify(payment.course_details, null, 2)}</p>
+                            </div>
+                          )}
                           
                           {/* Screenshot Display */}
                           {payment.payment_screenshot_url && (
@@ -736,23 +761,30 @@ export default function AdminPage() {
             </div>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-2">2. Test Registration</h4>
+              <h4 className="font-semibold mb-2">2. Test Course Selection & Registration</h4>
               <p className="text-sm text-gray-600">
-                Go to the main page and fill out the registration form. The data should appear in the Registrations section above.
+                Go to the main page, select different courses (MUN Mastery, IP Course, Strategic 1-1 Call, or Workshop), and fill out the registration form. Each course selection should appear with correct pricing in the admin panel.
               </p>
             </div>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-2">3. Test QR Code Payment</h4>
+              <h4 className="font-semibold mb-2">3. Test Razorpay Payment (Production)</h4>
               <p className="text-sm text-gray-600">
-                Complete the registration flow and upload a payment screenshot using the QR code method. The payment will automatically be marked as completed.
+                Complete the registration flow with live Razorpay credentials. Payment should process securely and appear in the Payments section with course details.
               </p>
             </div>
             <Separator />
             <div>
-              <h4 className="font-semibold mb-2">4. Test Razorpay Payment (when ready)</h4>
+              <h4 className="font-semibold mb-2">4. Test Different Course Pricing</h4>
               <p className="text-sm text-gray-600">
-                After setting up Razorpay production keys, test the online payment gateway. Both payment methods will appear in the Payments section.
+                Test each course to verify correct pricing: MUN Course (₹999), IP Course (₹699), Strategic Call (₹349), Workshop (₹499). Revenue should be tracked per course.
+              </p>
+            </div>
+            <Separator />
+            <div>
+              <h4 className="font-semibold mb-2">5. Test Strategic 1-1 Call Notifications</h4>
+              <p className="text-sm text-gray-600">
+                Select Strategic 1-1 Call to verify the 2-day contact notifications appear correctly during selection, payment, and confirmation.
               </p>
             </div>
           </CardContent>

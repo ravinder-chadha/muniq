@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       payment_id: razorpay_payment_id,
       order_id: razorpay_order_id,
       signature: razorpay_signature,
-      amount: courseDetails?.price || 0,
+      amount: courseDetails?.testAmount || courseDetails?.price || 0,
       currency: 'INR',
       course_id: courseDetails?.id,
       course_name: courseDetails?.name,

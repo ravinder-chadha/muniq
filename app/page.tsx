@@ -220,14 +220,12 @@ export default function MuniqWebsite() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          amount: selectedCourse.price,
+          amount: process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price,
           currency: "INR",
           registrationId,
           courseDetails: {
-            id: selectedCourse.id,
-            name: selectedCourse.name,
-            price: selectedCourse.price,
-            originalPrice: selectedCourse.originalPrice
+            ...selectedCourse,
+            testAmount: process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price
           },
           customerDetails: {
             name: `${formData.firstName} ${formData.lastName}`,
@@ -284,7 +282,7 @@ export default function MuniqWebsite() {
               paymentId: response.razorpay_payment_id,
               orderId: response.razorpay_order_id,
               signature: response.razorpay_signature,
-              amount: selectedCourse.price,
+              amount: process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price,
               timestamp: new Date().toISOString(),
               verified: true,
             }
@@ -713,6 +711,19 @@ const handleBrochureDownload = () => {
                     ))}
                   </div>
 
+                  {/* Course Schedule Notice */}
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <h4 className="font-semibold text-blue-800">Course Access</h4>
+                    </div>
+                    <p className="text-blue-700 text-sm">
+                      After payment, <strong>course access details and schedule will be shared with you within 2 working days</strong> via email.
+                    </p>
+                  </div>
+
                   <Button
                     onClick={() => {
                       localStorage.setItem('selected_course', JSON.stringify({
@@ -721,6 +732,14 @@ const handleBrochureDownload = () => {
                         price: 999,
                         originalPrice: 1500
                       }));
+                      
+                      // Show notification for MUN course
+                      toast({
+                        title: "MUN Mastery Course Selected",
+                        description: "Course access details and schedule will be shared with you within 2 working days after payment.",
+                        duration: 5000,
+                      });
+                      
                       scrollToSection("registration");
                     }}
                     className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
@@ -780,6 +799,19 @@ const handleBrochureDownload = () => {
                     ))}
                   </div>
 
+                  {/* Course Schedule Notice */}
+                  <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <h4 className="font-semibold text-green-800">Course Access</h4>
+                    </div>
+                    <p className="text-green-700 text-sm">
+                      After payment, <strong>course access details and schedule will be shared with you within 2 working days</strong> via email.
+                    </p>
+                  </div>
+
                   <Button
                     onClick={() => {
                       localStorage.setItem('selected_course', JSON.stringify({
@@ -788,6 +820,14 @@ const handleBrochureDownload = () => {
                         price: 699,
                         originalPrice: 999
                       }));
+                      
+                      // Show notification for IP course
+                      toast({
+                        title: "IP Mastery Course Selected",
+                        description: "Course access details and schedule will be shared with you within 2 working days after payment.",
+                        duration: 5000,
+                      });
+                      
                       scrollToSection("registration");
                     }}
                     className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
@@ -900,14 +940,19 @@ const handleBrochureDownload = () => {
                     <div className="flex items-center justify-center gap-4 mb-4">
                       <div className="text-4xl font-bold text-orange-600">₹499/-</div>
                     </div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-4 mb-2">
-                        <Clock className="w-5 h-5 text-orange-600" />
-                        <span className="text-gray-700">2 hours</span>
-                        <Calendar className="w-5 h-5 text-orange-600" />
-                        <span className="text-gray-700">20th July</span>
-                      </div>
+                  </div>
+
+                  {/* Workshop Schedule Notice */}
+                  <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <h4 className="font-semibold text-orange-800">Workshop Details</h4>
                     </div>
+                    <p className="text-orange-700 text-sm">
+                      After payment, <strong>workshop joining link and time will be shared with you within 2 working days</strong> via email and WhatsApp.
+                    </p>
                   </div>
 
                   <div className="space-y-4 mb-8">
@@ -939,6 +984,14 @@ const handleBrochureDownload = () => {
                         price: 499,
                         originalPrice: 499
                       }));
+                      
+                      // Show notification for workshop
+                      toast({
+                        title: "Beginner Workshop Selected",
+                        description: "Workshop joining link and time will be shared with you within 2 working days after payment.",
+                        duration: 5000,
+                      });
+                      
                       scrollToSection("registration");
                     }}
                     className="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-lg py-4 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
@@ -1361,7 +1414,7 @@ const handleBrochureDownload = () => {
                     size="lg"
                   >
                     <ArrowRight className="w-5 h-5 mr-2" />
-                    Proceed to Payment - ₹{selectedCourse.price}
+                    Proceed to Payment - ₹{process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price}
                   </Button>
                 </CardContent>
               </Card>
@@ -1420,6 +1473,51 @@ const handleBrochureDownload = () => {
                         </p>
                       </div>
                     )}
+                    
+                    {/* Special notice for Workshop */}
+                    {selectedCourse.id === 'workshop' && (
+                      <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          <h4 className="font-semibold text-orange-800">Workshop Details</h4>
+                        </div>
+                        <p className="text-orange-700 text-sm">
+                          After payment, <strong>workshop joining link and time will be shared with you within 2 working days</strong> via email and WhatsApp.
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Special notice for MUN Course */}
+                    {selectedCourse.id === 'mun_course' && (
+                      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          <h4 className="font-semibold text-blue-800">Course Access</h4>
+                        </div>
+                        <p className="text-blue-700 text-sm">
+                          After payment, <strong>course access details and schedule will be shared with you within 2 working days</strong> via email.
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Special notice for IP Course */}
+                    {selectedCourse.id === 'ip_course' && (
+                      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          <h4 className="font-semibold text-green-800">Course Access</h4>
+                        </div>
+                        <p className="text-green-700 text-sm">
+                          After payment, <strong>course access details and schedule will be shared with you within 2 working days</strong> via email.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Pricing */}
@@ -1428,14 +1526,28 @@ const handleBrochureDownload = () => {
                       {selectedCourse.originalPrice !== selectedCourse.price && (
                         <div className="text-2xl font-bold text-gray-400 line-through">₹{selectedCourse.originalPrice}/-</div>
                       )}
-                      <div className="text-4xl font-bold text-green-600">₹{selectedCourse.price}/-</div>
+                      <div className="text-4xl font-bold text-green-600">
+                        ₹{process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price}/-
+                      </div>
                       {selectedCourse.originalPrice !== selectedCourse.price && (
                         <Badge className="bg-green-100 text-green-800 font-bold">
                           {Math.round((1 - selectedCourse.price / selectedCourse.originalPrice) * 100)}% OFF!
                         </Badge>
                       )}
+                      {process.env.NODE_ENV === 'development' && (
+                        <Badge className="bg-yellow-100 text-yellow-800 font-bold animate-pulse">
+                          TEST MODE
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-gray-600 mb-6 leading-relaxed">{selectedCourse.name}</p>
+                    {process.env.NODE_ENV === 'development' && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                        <p className="text-yellow-700 text-sm font-semibold">
+                          🧪 Development Mode: Testing with ₹1 instead of ₹{selectedCourse.price}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Instructions */}
@@ -1478,7 +1590,7 @@ const handleBrochureDownload = () => {
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
-                        Pay ₹{selectedCourse.price} - Razorpay
+                        Pay ₹{process.env.NODE_ENV === 'development' ? 1 : selectedCourse.price} - Razorpay
                         <ExternalLink className="w-5 h-5 ml-2" />
                       </>
                     )}
@@ -1568,6 +1680,15 @@ const handleBrochureDownload = () => {
                     <p>🏆 {selectedCourse?.id === 'strategic_call' ? 'Session details will be shared separately' : 'Certificate will be provided upon completion'}</p>
                     {selectedCourse?.id === 'strategic_call' && (
                       <p className="font-semibold text-purple-600">📞 Our team will reach out to you within 2 working days to schedule your personalized session</p>
+                    )}
+                    {selectedCourse?.id === 'workshop' && (
+                      <p className="font-semibold text-orange-600">🔗 Workshop joining link and time will be shared with you within 2 working days</p>
+                    )}
+                    {selectedCourse?.id === 'mun_course' && (
+                      <p className="font-semibold text-blue-600">📚 Course access details and schedule will be shared with you within 2 working days</p>
+                    )}
+                    {selectedCourse?.id === 'ip_course' && (
+                      <p className="font-semibold text-green-600">📚 Course access details and schedule will be shared with you within 2 working days</p>
                     )}
                     <p>📞 Contact support if you need any assistance</p>
                   </div>
